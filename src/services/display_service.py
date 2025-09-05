@@ -9,12 +9,33 @@ from src.services.weather_service import WeatherService
 from src.services.calendar_service import CalendarService
 
 # Add the waveshare library path
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../waveshare-epaper/RaspberryPi_JetsonNano/python/lib'))
+waveshare_lib_path = os.path.join(os.path.dirname(__file__), '../../waveshare-epaper/RaspberryPi_JetsonNano/python/lib')
+sys.path.append(waveshare_lib_path)
+
+# Debug: Check if the path exists
+if os.path.exists(waveshare_lib_path):
+    print(f"Waveshare library path exists: {waveshare_lib_path}")
+    # List contents for debugging
+    try:
+        contents = os.listdir(waveshare_lib_path)
+        print(f"Library contents: {contents}")
+    except Exception as e:
+        print(f"Error listing directory: {e}")
+else:
+    print(f"Waveshare library path not found: {waveshare_lib_path}")
 
 try:
+    # Check if required system libraries are available
+    import RPi.GPIO as GPIO
+    import spidev
+    print("RPi.GPIO and spidev available")
+    
     from waveshare_epd import epd7in3e
-except ImportError:
-    print("Warning: Waveshare e-paper library not available. Display functions will be mocked.")
+    print("Successfully imported epd7in3e module")
+except ImportError as e:
+    print(f"Warning: Waveshare e-paper library not available: {e}")
+    print("Display functions will be mocked.")
+    print("Make sure RPi.GPIO and spidev are installed: pip install RPi.GPIO spidev")
     epd7in3e = None
 
 class DisplayService:
