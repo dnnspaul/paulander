@@ -207,7 +207,7 @@ def test_display_hardware():
     except Exception as e:
         return jsonify({'error': f'Display hardware test failed: {str(e)}'}), 500
 
-@api.route('/display/test-i2c', methods=['POST'])
+@api_bp.route('/display/test-i2c', methods=['POST'])
 def test_i2c():
     """Test I2C communication with ESP32"""
     try:
@@ -229,7 +229,7 @@ def test_i2c():
     except Exception as e:
         return jsonify({'error': f'I2C test failed: {str(e)}'}), 500
 
-@api.route('/display/force-bw-update', methods=['POST'])
+@api_bp.route('/display/force-bw-update', methods=['POST'])
 def force_bw_update():
     """Force immediate B&W display update (ignores timing intervals)"""
     try:
