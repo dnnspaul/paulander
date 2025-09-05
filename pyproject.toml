@@ -21,8 +21,9 @@ dependencies = [
 [project.optional-dependencies]
 rpi = [
     "RPi.GPIO",
-    "spidev",
+    "spidev", 
     "gpiozero",
+    "numpy",
 ]
 
 [build-system]

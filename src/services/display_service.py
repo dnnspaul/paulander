@@ -64,7 +64,8 @@ class DisplayService:
                     # Check if required system libraries are available
                     import RPi.GPIO as GPIO
                     import spidev
-                    print("RPi.GPIO and spidev available")
+                    import numpy
+                    print("RPi.GPIO, spidev, and numpy available")
                     
                     # Import the waveshare library
                     from waveshare_epd import epd7in3e

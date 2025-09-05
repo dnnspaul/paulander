@@ -4,6 +4,14 @@ E-ink display dashboard for Raspberry Pi with calendar and weather integration.
 
 ## Quick Start
 
+### System Dependencies (Raspberry Pi)
+First install the required system packages:
+```bash
+sudo apt-get update
+sudo apt-get install python3-pip python3-pil python3-numpy python3-gpiozero
+sudo raspi-config nonint do_spi 0  # Enable SPI interface
+```
+
 ### Using uv (recommended)
 ```bash
 # Initialize git submodules (required for Waveshare e-paper library)
