@@ -370,20 +370,13 @@ class DisplayService:
             
             if events:
                 for i, event in enumerate(events[:6]):  # Limit to 6 events
-                    # Safely handle start time and convert to Europe/Berlin timezone
+                    # Safely handle start time (keep as UTC timestamp - ESP32 will convert to local timezone)
                     start_time = 0
                     event_start = event.get('start') if event else None
                     
                     if event_start is not None and hasattr(event_start, 'timestamp'):
                         try:
-                            # Convert to Europe/Berlin timezone
-                            berlin_tz = pytz.timezone('Europe/Berlin')
-                            if event_start.tzinfo is None:
-                                # Assume UTC if no timezone info
-                                event_start = pytz.UTC.localize(event_start)
-                            # Convert to Berlin timezone
-                            berlin_time = event_start.astimezone(berlin_tz)
-                            start_time = int(berlin_time.timestamp())
+                            start_time = int(event_start.timestamp())
                         except (AttributeError, TypeError):
                             start_time = 0
                     

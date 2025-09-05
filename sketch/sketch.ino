@@ -5,6 +5,7 @@
 #include <Fonts/FreeMonoBold12pt7b.h>
 #include <Fonts/FreeMono9pt7b.h>
 #include <ArduinoJson.h>
+#include <time.h>
 
 // Pin definitions for 7.5" B&W e-paper display
 #define EPD_CS     5
@@ -64,6 +65,11 @@ volatile unsigned long lastReceiveTime = 0;  // Global variable for timeout trac
 void setup() {
   Serial.begin(115200);
   Serial.println("\n=== Paulander ESP32 B&W Display Controller ===");
+  
+  // Configure timezone for Europe/Berlin (no WiFi needed, just local timezone setting)
+  setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+  tzset();
+  Serial.println("Timezone set to Europe/Berlin (CET/CEST)");
   
   // Debug: Print structure sizes
   Serial.printf("WeatherData size: %d bytes\n", sizeof(WeatherData));
