@@ -12,6 +12,9 @@ from src.services.calendar_service import CalendarService
 waveshare_lib_path = os.path.join(os.path.dirname(__file__), '../../waveshare-epaper/RaspberryPi_JetsonNano/python/lib')
 sys.path.append(waveshare_lib_path)
 
+# Check if we should force mock mode (useful for development)
+FORCE_MOCK_DISPLAY = os.getenv('FORCE_MOCK_DISPLAY', 'false').lower() == 'true'
+
 # Debug: Check if the path exists
 if os.path.exists(waveshare_lib_path):
     print(f"Waveshare library path exists: {waveshare_lib_path}")
@@ -24,21 +27,39 @@ if os.path.exists(waveshare_lib_path):
 else:
     print(f"Waveshare library path not found: {waveshare_lib_path}")
 
-try:
-    # Check if required system libraries are available
-    import RPi.GPIO as GPIO
-    import spidev
-    import gpiozero
-    print("RPi.GPIO, spidev, and gpiozero available")
-    
-    from waveshare_epd import epd7in3e
-    print("Successfully imported epd7in3e module")
-except ImportError as e:
-    print(f"Warning: Waveshare e-paper library not available: {e}")
-    print("Display functions will be mocked.")
-    print("Make sure all dependencies are installed: uv sync --extra rpi")
-    print("Or manually: pip install RPi.GPIO spidev gpiozero")
+if FORCE_MOCK_DISPLAY:
+    print("FORCE_MOCK_DISPLAY is enabled - display functions will be mocked")
     epd7in3e = None
+else:
+    try:
+        # Check if required system libraries are available
+        import RPi.GPIO as GPIO
+        import spidev
+        import gpiozero
+        print("RPi.GPIO, spidev, and gpiozero available")
+        
+        # Try to import the waveshare library
+        from waveshare_epd import epd7in3e
+        print("Successfully imported epd7in3e module")
+        
+    except ImportError as e:
+        print(f"Warning: Waveshare e-paper library not available: {e}")
+        print("Display functions will be mocked.")
+        print("Make sure all dependencies are installed: uv sync --extra rpi")
+        print("Or manually: pip install RPi.GPIO spidev gpiozero")
+        epd7in3e = None
+        
+    except RuntimeError as e:
+        print(f"Warning: GPIO hardware initialization failed: {e}")
+        print("Display functions will be mocked.")
+        print("This is normal if the e-paper display is not connected or GPIO permissions are insufficient.")
+        print("To force mock mode, set environment variable: FORCE_MOCK_DISPLAY=true")
+        epd7in3e = None
+        
+    except Exception as e:
+        print(f"Warning: Unexpected error initializing display: {e}")
+        print("Display functions will be mocked.")
+        epd7in3e = None
 
 class DisplayService:
     def __init__(self):
