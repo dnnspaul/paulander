@@ -8,24 +8,33 @@ from src.services.config_service import ConfigService
 from src.services.weather_service import WeatherService
 from src.services.calendar_service import CalendarService
 
-# Add the waveshare library path
-waveshare_lib_path = os.path.join(os.path.dirname(__file__), '../../waveshare-epaper/RaspberryPi_JetsonNano/python/lib')
-sys.path.append(waveshare_lib_path)
+# Try to use system-installed waveshare library first, then fall back to submodule
+waveshare_lib_paths = [
+    '/home/pi/e-Paper/RaspberryPi_JetsonNano/python/lib',  # System installation
+    os.path.join(os.path.dirname(__file__), '../../waveshare-epaper/RaspberryPi_JetsonNano/python/lib')  # Submodule
+]
 
 # Check if we should force mock mode (useful for development)
 FORCE_MOCK_DISPLAY = os.getenv('FORCE_MOCK_DISPLAY', 'false').lower() == 'true'
 
-# Debug: Check if the path exists
-if os.path.exists(waveshare_lib_path):
-    print(f"Waveshare library path exists: {waveshare_lib_path}")
+# Find the correct waveshare library path
+waveshare_lib_path = None
+for path in waveshare_lib_paths:
+    if os.path.exists(path):
+        waveshare_lib_path = path
+        print(f"Found Waveshare library at: {path}")
+        sys.path.insert(0, path)  # Insert at beginning to prioritize this path
+        break
+
+if not waveshare_lib_path:
+    print(f"Waveshare library not found in any of these paths: {waveshare_lib_paths}")
+else:
     # List contents for debugging
     try:
         contents = os.listdir(waveshare_lib_path)
         print(f"Library contents: {contents}")
     except Exception as e:
         print(f"Error listing directory: {e}")
-else:
-    print(f"Waveshare library path not found: {waveshare_lib_path}")
 
 if FORCE_MOCK_DISPLAY:
     print("FORCE_MOCK_DISPLAY is enabled - display functions will be mocked")
@@ -35,25 +44,24 @@ else:
         # Check if required system libraries are available
         import RPi.GPIO as GPIO
         import spidev
-        import gpiozero
-        print("RPi.GPIO, spidev, and gpiozero available")
+        print("RPi.GPIO and spidev available")
         
-        # Clean up any existing GPIO state before importing
-        try:
-            GPIO.cleanup()
-            print("Cleaned up existing GPIO state")
-        except:
-            pass
+        # Don't import gpiozero here - it conflicts with the Waveshare library
+        # The Waveshare library uses RPi.GPIO directly
         
-        # Try to import the waveshare library
-        from waveshare_epd import epd7in3e
-        print("Successfully imported epd7in3e module")
+        # Try to import the waveshare library without initializing GPIO
+        # We'll initialize GPIO only when we actually need to use the display
+        import sys
+        if waveshare_lib_path and waveshare_lib_path in sys.path:
+            from waveshare_epd import epd7in3e
+            print("Successfully imported epd7in3e module")
+        else:
+            raise ImportError("Waveshare library path not found")
         
     except ImportError as e:
         print(f"Warning: Waveshare e-paper library not available: {e}")
         print("Display functions will be mocked.")
-        print("Make sure all dependencies are installed: uv sync --extra rpi")
-        print("Or manually: pip install RPi.GPIO spidev gpiozero")
+        print("Make sure the Waveshare library is installed at /home/pi/e-Paper/")
         epd7in3e = None
         
     except RuntimeError as e:
@@ -81,17 +89,28 @@ class DisplayService:
         self.BW_WIDTH = 800  # These will be sent to ESP32 via I2C
         self.BW_HEIGHT = 480
         
-        # Initialize color display
+        # Don't initialize color display here - do it lazily when needed
         self.color_epd = None
-        if epd7in3e:
+        self.epd7in3e_module = epd7in3e
+    
+    def _init_color_display(self):
+        """Lazily initialize the color display when needed"""
+        if self.color_epd is None and self.epd7in3e_module is not None:
             try:
-                self.color_epd = epd7in3e.EPD()
+                print("Initializing color e-paper display...")
+                self.color_epd = self.epd7in3e_module.EPD()
+                print("Color display initialized successfully")
+                return True
             except Exception as e:
                 print(f"Warning: Could not initialize color display: {e}")
-    
+                return False
+        return self.color_epd is not None
+
     def get_status(self) -> Dict[str, str]:
         """Get display status"""
-        color_status = "active" if self.color_epd else "unavailable"
+        color_status = "available" if self.epd7in3e_module else "unavailable"
+        if self.color_epd:
+            color_status = "active"
         bw_status = "active"  # Assume ESP32 connection is always available
         
         return {
@@ -149,7 +168,8 @@ class DisplayService:
             # Generate AI image based on today's events and weather
             image = self.generate_daily_image()
             
-            if self.color_epd:
+            # Try to initialize the display if not already done
+            if self._init_color_display():
                 # Initialize display
                 self.color_epd.init()
                 self.color_epd.Clear()
@@ -159,6 +179,7 @@ class DisplayService:
                 
                 # Put display to sleep to save power
                 self.color_epd.sleep()
+                print("Color display updated successfully")
             else:
                 # Save image for testing
                 image.save('color_display_output.png')
