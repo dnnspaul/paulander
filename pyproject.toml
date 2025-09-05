@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "E-ink display dashboard for Raspberry Pi with calendar and weather integration"
 authors = [{name = "Dennis Paul", email = "dennis@example.com"}]
 readme = "CLAUDE.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
     "Flask==2.3.3",
     "Flask-CORS==4.0.0",
