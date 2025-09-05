@@ -36,9 +36,18 @@ def _load_epd7in3e():
         epd7in3e = None
     else:
         try:
+            # Import our custom RPi.GPIO-based epdconfig first
+            from src.services import epdconfig_rpi_gpio
+            
+            # Import the waveshare module
             from waveshare_epd import epd7in3e as _epd7in3e
+            
+            # Monkey patch the epdconfig to use our RPi.GPIO implementation
+            _epd7in3e.epdconfig = epdconfig_rpi_gpio
+            
             epd7in3e = _epd7in3e
-            print("Successfully imported epd7in3e module")
+            print("Successfully imported epd7in3e module with RPi.GPIO patch")
+            print(f"Patched epdconfig module: {epd7in3e.epdconfig.__name__}")
         except ImportError as e:
             print(f"Warning: Waveshare e-paper library not available: {e}")
             print("Display functions will be mocked.")
@@ -181,6 +190,7 @@ class DisplayService:
                             pass
                         
                     print("Initializing display hardware...")
+                    print(f"Using epdconfig: {epd_module.epdconfig.__name__}")
                     self.color_epd.init()
                     self.display_initialized = True
                     print("✓ Display initialized")

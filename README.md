@@ -91,3 +91,7 @@ For detailed hardware setup and configuration, see CLAUDE.md.
 ## Production Deployment
 
 For production use on Raspberry Pi, set `FLASK_ENV=production` in your `.env` file to disable debug mode and auto-reload, which can interfere with GPIO hardware initialization.
+
+### GPIO Compatibility
+
+This application includes a custom GPIO implementation (`epdconfig_rpi_gpio.py`) that replaces the Waveshare library's default gpiozero implementation with RPi.GPIO. This resolves "LED is closed or uninitialized" errors and improves compatibility with Flask applications.
