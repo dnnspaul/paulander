@@ -16,7 +16,7 @@
                         <i :class="message.type === 'success' ? 'fas fa-check-circle text-green-400' : 'fas fa-exclamation-circle text-red-400'"></i>
                     </div>
                     <div class="ml-3">
-                        <p class="text-sm font-medium">{{ message.text }}</p>
+                        <p class="text-sm font-medium">[[ message.text ]]</p>
                     </div>
                 </div>
             </div>
@@ -150,6 +150,7 @@
 const { createApp } = Vue;
 
 createApp({
+    delimiters: ['[[', ']]'],
     data() {
         return {
             config: {
