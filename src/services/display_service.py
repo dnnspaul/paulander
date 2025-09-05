@@ -11,6 +11,7 @@ from google import genai as genai_new
 from google.genai import types
 import struct
 import time
+import pytz
 from src.services.config_service import ConfigService
 from src.services.weather_service import WeatherService
 from src.services.calendar_service import CalendarService
@@ -369,13 +370,20 @@ class DisplayService:
             
             if events:
                 for i, event in enumerate(events[:6]):  # Limit to 6 events
-                    # Safely handle start time
+                    # Safely handle start time and convert to Europe/Berlin timezone
                     start_time = 0
                     event_start = event.get('start') if event else None
                     
                     if event_start is not None and hasattr(event_start, 'timestamp'):
                         try:
-                            start_time = int(event_start.timestamp())
+                            # Convert to Europe/Berlin timezone
+                            berlin_tz = pytz.timezone('Europe/Berlin')
+                            if event_start.tzinfo is None:
+                                # Assume UTC if no timezone info
+                                event_start = pytz.UTC.localize(event_start)
+                            # Convert to Berlin timezone
+                            berlin_time = event_start.astimezone(berlin_tz)
+                            start_time = int(berlin_time.timestamp())
                         except (AttributeError, TypeError):
                             start_time = 0
                     
@@ -384,8 +392,8 @@ class DisplayService:
                     location = event.get('location', '') if event else ''
                     
                     event_data = {
-                        'title': title[:63],  # Limit to 63 chars
-                        'location': location[:31] if location else '',  # Limit to 31 chars
+                        'title': self._sanitize_text_for_display(title)[:63],  # Limit to 63 chars
+                        'location': self._sanitize_text_for_display(location)[:31] if location else '',  # Limit to 31 chars
                         'start_time': start_time,
                         'valid': bool(title)
                     }
@@ -513,8 +521,8 @@ class DisplayService:
         events_data = []
         for i, event in enumerate(self.cached_calendar_data[:6]):  # Limit to 6 events
             event_data = {
-                "title": event['title'][:63],  # Limit title length
-                "location": event['location'] if event['location'] != 'None' else '',
+                "title": self._sanitize_text_for_display(event['title'])[:63],  # Limit title length
+                "location": self._sanitize_text_for_display(event['location']) if event['location'] != 'None' else '',
                 "start_time": event['start_time'],
                 "valid": event['valid']
             }
@@ -524,13 +532,13 @@ class DisplayService:
         json_data = {
             "weather": {
                 "temperature": float(self.cached_weather_data['temperature']),
-                "description": self.cached_weather_data['description'][:63],
-                "location": self.cached_weather_data['location'][:31],
+                "description": self._sanitize_text_for_display(self.cached_weather_data['description'])[:63],
+                "location": self._sanitize_text_for_display(self.cached_weather_data['location'])[:31],
                 "timestamp": self.cached_weather_data['timestamp']
             },
             "events": events_data,
             "event_count": len(events_data),
-            "timestamp": int(time.time())
+            "timestamp": int(time.time())  # Current timestamp for data freshness
         }
         
         # Convert to JSON string and encode to bytes
@@ -542,6 +550,48 @@ class DisplayService:
         print(f"JSON preview (first 100 chars): {json_string[:100]}...")
         
         return json_bytes
+    
+    def _sanitize_text_for_display(self, text: str) -> str:
+        """Sanitize text by replacing German umlauts and special characters for ESP32 display"""
+        if not text:
+            return text
+        
+        # Replace German umlauts and special characters
+        replacements = {
+            'ä': 'ae',
+            'ö': 'oe', 
+            'ü': 'ue',
+            'Ä': 'Ae',
+            'Ö': 'Oe',
+            'Ü': 'Ue',
+            'ß': 'ss',
+            'é': 'e',
+            'è': 'e',
+            'ê': 'e',
+            'á': 'a',
+            'à': 'a',
+            'â': 'a',
+            'í': 'i',
+            'ì': 'i',
+            'î': 'i',
+            'ó': 'o',
+            'ò': 'o',
+            'ô': 'o',
+            'ú': 'u',
+            'ù': 'u',
+            'û': 'u',
+            'ç': 'c',
+            'ñ': 'n'
+        }
+        
+        sanitized = text
+        for char, replacement in replacements.items():
+            sanitized = sanitized.replace(char, replacement)
+        
+        # Remove any remaining non-ASCII characters
+        sanitized = ''.join(char if ord(char) < 128 else '?' for char in sanitized)
+        
+        return sanitized
     
     def _create_mock_bw_display(self):
         """Create mock B&W display output when I2C is not available"""
