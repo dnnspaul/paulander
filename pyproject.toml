@@ -23,6 +23,7 @@ rpi = [
     "RPi.GPIO>=0.7.0",
     "spidev>=3.5",
     "numpy>=1.21.0",
+    "gpiozero>=1.6.0",
 ]
 
 [build-system]
