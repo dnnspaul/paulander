@@ -16,6 +16,15 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Pin definition (module level for compatibility)
+RST_PIN  = 17
+DC_PIN   = 25
+CS_PIN   = 8
+BUSY_PIN = 24
+PWR_PIN  = 18
+MOSI_PIN = 10
+SCLK_PIN = 11
+
 class RaspberryPi:
     # Pin definition
     RST_PIN  = 17
@@ -36,6 +45,7 @@ class RaspberryPi:
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.RST_PIN, GPIO.OUT)
         GPIO.setup(self.DC_PIN, GPIO.OUT)
+        GPIO.setup(self.CS_PIN, GPIO.OUT)  # Add CS pin
         GPIO.setup(self.PWR_PIN, GPIO.OUT)
         GPIO.setup(self.BUSY_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
         
@@ -46,6 +56,8 @@ class RaspberryPi:
             GPIO.output(self.RST_PIN, GPIO.HIGH if value else GPIO.LOW)
         elif pin == self.DC_PIN:
             GPIO.output(self.DC_PIN, GPIO.HIGH if value else GPIO.LOW)
+        elif pin == self.CS_PIN:
+            GPIO.output(self.CS_PIN, GPIO.HIGH if value else GPIO.LOW)
         elif pin == self.PWR_PIN:
             GPIO.output(self.PWR_PIN, GPIO.HIGH if value else GPIO.LOW)
 
@@ -56,6 +68,8 @@ class RaspberryPi:
             return GPIO.input(self.RST_PIN)
         elif pin == self.DC_PIN:
             return GPIO.input(self.DC_PIN)
+        elif pin == self.CS_PIN:
+            return GPIO.input(self.CS_PIN)
         elif pin == self.PWR_PIN:
             return GPIO.input(self.PWR_PIN)
 
@@ -94,6 +108,7 @@ class RaspberryPi:
         # Turn off all pins
         GPIO.output(self.RST_PIN, GPIO.LOW)
         GPIO.output(self.DC_PIN, GPIO.LOW)
+        GPIO.output(self.CS_PIN, GPIO.LOW)
         GPIO.output(self.PWR_PIN, GPIO.LOW)
         logger.debug("close 5V, Module enters 0 power consumption ...")
         
