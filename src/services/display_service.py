@@ -443,7 +443,7 @@ class DisplayService:
                     if chunks_sent % 5 == 0:  # Progress every 5 chunks
                         print(f"Progress: {chunks_sent}/{total_chunks} chunks sent ({total_bytes_sent} bytes)")
                     
-                    time.sleep(0.02)  # 20ms delay between chunks for better timing
+                    time.sleep(0.01)  # 10ms delay between chunks for faster transmission
                     
                 except Exception as chunk_error:
                     print(f"✗ Chunk {chunk_num} ({actual_chunk_size} bytes) failed: {chunk_error}")

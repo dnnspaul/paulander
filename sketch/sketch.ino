@@ -103,7 +103,7 @@ void loop() {
   
   // Check for I2C receive timeout
   static unsigned long lastReceiveTime = millis();
-  if (receivingMultipart && (millis() - lastReceiveTime > 3000)) {
+  if (receivingMultipart && (millis() - lastReceiveTime > 5000)) {  // Increased to 5 seconds
     Serial.printf("I2C receive timeout - received %d bytes (expected: %d)\n", totalDataReceived, sizeof(DisplayData));
     
     // If we received close to expected amount, try to process it
@@ -245,33 +245,44 @@ void processI2CData() {
   Serial.printf("Processing I2C data: %d bytes (DisplayData size: %d)\n", i2cDataLength, sizeof(DisplayData));
   
   if (i2cDataLength >= 690) {  // Accept data close to 698-740 bytes
+    // Check if data starts with register byte 0xFF and skip it
+    uint8_t* dataStart = i2cBuffer;
+    int actualDataLength = i2cDataLength;
+    
+    if (i2cBuffer[0] == 0xFF) {
+      Serial.println("Detected register byte 0xFF, skipping to actual data");
+      dataStart = &i2cBuffer[1];  // Skip register byte
+      actualDataLength -= 1;
+    }
+    
     // Debug: Show raw data at key offsets
     Serial.println("=== Raw Data Debug ===");
+    Serial.printf("Data starts at offset: %d\n", (dataStart - i2cBuffer));
     Serial.printf("Bytes 0-3 (temp): 0x%02X 0x%02X 0x%02X 0x%02X\n", 
-                  i2cBuffer[0], i2cBuffer[1], i2cBuffer[2], i2cBuffer[3]);
+                  dataStart[0], dataStart[1], dataStart[2], dataStart[3]);
     Serial.printf("Bytes 4-10 (desc): ");
     for (int i = 4; i < 11; i++) {
-      Serial.printf("0x%02X ", i2cBuffer[i]);
+      Serial.printf("0x%02X ", dataStart[i]);
     }
     Serial.println();
     
     // Show as float for temperature
-    float* temp_ptr = (float*)&i2cBuffer[0];
+    float* temp_ptr = (float*)&dataStart[0];
     Serial.printf("Temperature as float: %.2f\n", *temp_ptr);
     
     // Show description string
     Serial.printf("Description string: '");
-    for (int i = 4; i < 68 && i < i2cDataLength; i++) {
-      if (i2cBuffer[i] >= 32 && i2cBuffer[i] <= 126) {
-        Serial.printf("%c", i2cBuffer[i]);
-      } else if (i2cBuffer[i] == 0) {
+    for (int i = 4; i < 68 && i < actualDataLength; i++) {
+      if (dataStart[i] >= 32 && dataStart[i] <= 126) {
+        Serial.printf("%c", dataStart[i]);
+      } else if (dataStart[i] == 0) {
         break;
       }
     }
     Serial.println("'");
     
-    // Copy received data
-    memcpy(&currentData, i2cBuffer, sizeof(DisplayData));
+    // Copy received data (skip register byte if present)
+    memcpy(&currentData, dataStart, min((int)sizeof(DisplayData), actualDataLength));
     
     // Calculate hash of current data for change detection
     uint32_t newHash = calculateDataHash(&currentData);
