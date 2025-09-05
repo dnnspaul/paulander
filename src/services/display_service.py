@@ -65,7 +65,8 @@ class DisplayService:
                     import RPi.GPIO as GPIO
                     import spidev
                     import numpy
-                    print("RPi.GPIO, spidev, and numpy available")
+                    import PIL
+                    print("RPi.GPIO, spidev, numpy, and PIL available")
                     
                     # Import the waveshare library
                     from waveshare_epd import epd7in3e

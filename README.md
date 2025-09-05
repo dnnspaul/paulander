@@ -8,7 +8,7 @@ E-ink display dashboard for Raspberry Pi with calendar and weather integration.
 First install the required system packages:
 ```bash
 sudo apt-get update
-sudo apt-get install python3-pip python3-pil python3-numpy python3-gpiozero
+sudo apt-get install python3-pip python3-pil python3-numpy
 sudo raspi-config nonint do_spi 0  # Enable SPI interface
 ```
 
@@ -80,3 +80,19 @@ python run.py
 - `GET /api/display/status` - Display status
 
 For detailed hardware setup and configuration, see CLAUDE.md.
+
+## Troubleshooting
+
+### E-Paper Display Issues
+If the display shows as "mocked" or you get GPIO errors, run the debug script:
+```bash
+python debug_display.py
+```
+
+This will test the Waveshare library import and GPIO initialization separately from the Flask app.
+
+Common solutions:
+- Run with sudo if you get GPIO permission errors
+- Ensure SPI is enabled: `sudo raspi-config nonint do_spi 0`
+- Check hardware connections match PINOUT.md
+- Reboot if GPIO pins are in inconsistent state
