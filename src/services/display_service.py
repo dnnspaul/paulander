@@ -466,10 +466,10 @@ class DisplayService:
                 
                 for retry in range(max_chunk_retries):
                     try:
-                        # Use raw I2C write to send data exactly as-is
+                        # Send JSON data directly without register byte prefix
+                        # Use write_i2c_block_data with register 0x00 to avoid 0xFF corruption
                         chunk_list = list(chunk)
-                        # This sends the data without any register prefix
-                        self.i2c_bus.write_i2c_block_data(ESP32_I2C_ADDRESS, 0xFF, chunk_list)
+                        self.i2c_bus.write_i2c_block_data(ESP32_I2C_ADDRESS, 0x00, chunk_list)
                         chunk_sent = True
                         chunks_sent += 1
                         total_bytes_sent += actual_chunk_size

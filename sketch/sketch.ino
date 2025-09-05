@@ -218,7 +218,12 @@ void onI2CReceive(int length) {
     if (totalDataReceived <= 32) {
       Serial.printf("First chunk bytes: ");
       for (int i = 0; i < min(8, bytesRead); i++) {
-        Serial.printf("0x%02X ", i2cBuffer[totalDataReceived - bytesRead + i]);
+        uint8_t byte = i2cBuffer[totalDataReceived - bytesRead + i];
+        if (byte >= 32 && byte <= 126) {
+          Serial.printf("'%c' ", byte);  // Show printable characters
+        } else {
+          Serial.printf("0x%02X ", byte);  // Show non-printable as hex
+        }
       }
       Serial.println();
     }
@@ -258,8 +263,8 @@ void processI2CData() {
     uint8_t* dataStart = i2cBuffer;
     int actualDataLength = i2cDataLength;
     
-    if (i2cBuffer[0] == 0xFF) {
-      Serial.println("Detected register byte 0xFF, skipping to actual data");
+    if (i2cBuffer[0] == 0x00) {
+      Serial.println("Detected register byte 0x00, skipping to actual JSON data");
       dataStart = &i2cBuffer[1];  // Skip register byte
       actualDataLength -= 1;
     }
