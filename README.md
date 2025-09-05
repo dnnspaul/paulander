@@ -47,9 +47,11 @@ python run.py
 ## Configuration
 
 1. Open http://localhost:5000/config in your browser
-2. Configure your iCloud calendar credentials
-3. Set your OpenWeather API key
-4. Optionally configure Gemini API key for AI-generated images
+2. Configure your iCloud calendar credentials (required)
+3. Set your OpenWeather API key (required)
+4. Configure Gemini API key for AI-generated images (optional)
+   - Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+   - If not configured, the color display will show a text-based fallback image
 
 ## Hardware Requirements
 
@@ -62,8 +64,9 @@ python run.py
 
 - **Calendar Integration**: Connects to iCloud calendar via CalDAV
 - **Weather Display**: Current weather and forecast from OpenWeatherMap
+- **AI Image Generation**: Uses Gemini 2.5 Flash to create personalized vintage-style images based on weather and calendar events, optimized with Floyd-Steinberg dithering for e-ink displays
 - **Dual Displays**: 
-  - Color display: Daily AI-generated image refresh at 6 AM
+  - Color display: Daily AI-generated vintage poster refresh at 6 AM (800x480, 6 colors)
   - B&W display: Weather and calendar updates every 30 minutes
 - **Web Interface**: Mobile-first responsive configuration interface
 - **Robust Operation**: Automatic restarts and error handling
@@ -78,6 +81,8 @@ python run.py
 - `POST /api/config` - Update configuration
 - `POST /api/display/refresh` - Manually refresh displays
 - `GET /api/display/status` - Display status
+- `POST /api/display/test-ai-image` - Test AI image generation with dithering
+- `POST /api/display/test-dithering` - Test Floyd-Steinberg dithering algorithm
 
 For detailed hardware setup and configuration, see CLAUDE.md.
 

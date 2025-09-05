@@ -1,9 +1,13 @@
 import os
 import sys
 from PIL import Image, ImageDraw, ImageFont
+import numpy as np
 from datetime import datetime
 from typing import Dict, Any, List
+from io import BytesIO
 import google.generativeai as genai
+from google import genai as genai_new
+from google.genai import types
 from src.services.config_service import ConfigService
 from src.services.weather_service import WeatherService
 from src.services.calendar_service import CalendarService
@@ -164,42 +168,12 @@ class DisplayService:
             weather_summary = self.weather_service.get_weather_summary_for_ai()
             events = self.calendar_service.get_today_events()
             
-            # Create prompt for AI
-            prompt_parts = [
-                "Create a beautiful, artistic image that represents today.",
-                f"Weather: {weather_summary}",
-            ]
-            
-            if events:
-                event_summaries = []
-                for event in events[:3]:  # Limit to 3 events
-                    if event['title']:
-                        event_text = event['title']
-                        if event['location']:
-                            event_text += f" at {event['location']}"
-                        event_summaries.append(event_text)
-                
-                if event_summaries:
-                    prompt_parts.append(f"Today's events: {', '.join(event_summaries)}")
-            
-            prompt_parts.append("Style: Modern, minimalist, suitable for an e-ink display with limited colors.")
-            prompt_parts.append("Image should be 800x480 pixels, landscape orientation.")
-            
-            prompt = " ".join(prompt_parts)
-            
             # Generate image with Gemini (if available)
             gemini_api_key = self.config_service.get('gemini_api_key')
             
             if gemini_api_key:
                 try:
-                    genai.configure(api_key=gemini_api_key)
-                    model = genai.GenerativeModel('gemini-pro-vision')
-                    
-                    # Note: This is a placeholder - Gemini Pro Vision currently doesn't generate images
-                    # In a real implementation, you'd use a different model or service for image generation
-                    # For now, create a simple text-based image
-                    return self._create_fallback_color_image(weather_summary, events)
-                    
+                    return self._generate_gemini_image(weather_summary, events)
                 except Exception as e:
                     print(f"AI image generation failed: {e}")
                     return self._create_fallback_color_image(weather_summary, events)
@@ -209,6 +183,182 @@ class DisplayService:
         except Exception as e:
             print(f"Error generating daily image: {e}")
             return self._create_fallback_color_image("Weather unavailable", [])
+    
+    def _generate_gemini_image(self, weather_summary: str, events: List[Dict]) -> Image.Image:
+        """Generate image using Gemini API with two-step process"""
+        gemini_api_key = self.config_service.get('gemini_api_key')
+        
+        # Step 1: Generate detailed prompt using Gemini 2.5 Flash
+        prompt_generation_text = self._create_prompt_generation_request(weather_summary, events)
+        
+        try:
+            # Configure the new Gemini client
+            client = genai_new.Client(api_key=gemini_api_key)
+            
+            # Generate the detailed prompt
+            prompt_response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[prompt_generation_text],
+            )
+            
+            detailed_prompt = prompt_response.text.strip()
+            print(f"Generated prompt: {detailed_prompt}")
+            
+            # Step 2: Generate image using the detailed prompt
+            image_response = client.models.generate_content(
+                model="gemini-2.5-flash-image-preview",
+                contents=[detailed_prompt]
+            )
+            
+            # Extract and process the generated image
+            for part in image_response.candidates[0].content.parts:
+                if part.inline_data is not None:
+                    image = Image.open(BytesIO(part.inline_data.data))
+                    # Resize and crop to fit 800x480 display
+                    resized_image = self._resize_and_crop_image(image, self.COLOR_WIDTH, self.COLOR_HEIGHT)
+                    # Apply Floyd-Steinberg dithering for e-ink display
+                    dithered_image = self._apply_floyd_steinberg_dithering(resized_image)
+                    return dithered_image
+            
+            # If no image was generated, fall back to text-based image
+            print("No image generated, using fallback")
+            return self._create_fallback_color_image(weather_summary, events)
+            
+        except Exception as e:
+            print(f"Gemini image generation error: {e}")
+            return self._create_fallback_color_image(weather_summary, events)
+    
+    def _create_prompt_generation_request(self, weather_summary: str, events: List[Dict]) -> str:
+        """Create the prompt generation request for Gemini"""
+        # Get today's date
+        today_date = datetime.now().strftime("%Y-%m-%d")
+        
+        # Format calendar events
+        event_texts = []
+        if events:
+            for event in events[:3]:  # Limit to 3 events
+                if event['title']:
+                    event_text = event['title']
+                    if event['location']:
+                        event_text += f" ({event['location']})"
+                    # Add time if available
+                    if event.get('start'):
+                        try:
+                            time_str = event['start'].strftime("%I%p").lower()
+                            event_text += f" {time_str}"
+                        except:
+                            pass
+                    event_texts.append(event_text)
+        
+        events_text = "\n".join([f"- {event}" for event in event_texts]) if event_texts else "- No events scheduled"
+        
+        # Create the prompt generation request
+        prompt_request = f"""I want you to write a detailed prompt for an AI to generate a modern painting that is being shown on an 7.3" e-ink display that supports 6 colors (black, white, red, green, blue, yellow) with a resolution of 800x480. The generated image should reflect today.
+
+*Todays information*
+Date: {today_date}
+Weather: {weather_summary}
+Calendar events:
+{events_text}
+
+ONLY RETURN YOUR PROMPT SUGGESTION, WITHOUT ANYTHING ELSE (DISMISS SOMETHING LIKE `Here's your prompt`).
+**Never** mention the e-ink display, because it will result in an e-ink display being rendered. Also make sure, that an artistic painting is generated instead of anything that looks like an info screen.
+
+Make it vintage-poster style. Let it only generate an image without any title, date or something like that on the image."""
+        
+        return prompt_request
+    
+    def _resize_and_crop_image(self, image: Image.Image, target_width: int, target_height: int) -> Image.Image:
+        """Resize and crop image to fit target dimensions, cropping from center"""
+        # Calculate the aspect ratios
+        original_width, original_height = image.size
+        target_ratio = target_width / target_height
+        original_ratio = original_width / original_height
+        
+        if original_ratio > target_ratio:
+            # Image is wider than target, crop width from center
+            new_height = original_height
+            new_width = int(original_height * target_ratio)
+            left = (original_width - new_width) // 2
+            top = 0
+            right = left + new_width
+            bottom = original_height
+        else:
+            # Image is taller than target, crop height from center
+            new_width = original_width
+            new_height = int(original_width / target_ratio)
+            left = 0
+            top = (original_height - new_height) // 2
+            right = original_width
+            bottom = top + new_height
+        
+        # Crop the image from center
+        cropped_image = image.crop((left, top, right, bottom))
+        
+        # Resize to exact target dimensions
+        final_image = cropped_image.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        
+        return final_image
+    
+    def _apply_floyd_steinberg_dithering(self, image: Image.Image) -> Image.Image:
+        """Apply Floyd-Steinberg dithering for e-ink display with 6 colors"""
+        # Define the 6 colors supported by the e-ink display (RGB values)
+        eink_colors = [
+            (0, 0, 0),       # Black
+            (255, 255, 255), # White
+            (255, 0, 0),     # Red
+            (0, 255, 0),     # Green
+            (0, 0, 255),     # Blue
+            (255, 255, 0),   # Yellow
+        ]
+        
+        # Convert image to RGB if not already
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        
+        # Convert to numpy array for easier manipulation
+        img_array = np.array(image, dtype=np.float32)
+        height, width = img_array.shape[:2]
+        
+        # Apply Floyd-Steinberg dithering
+        for y in range(height):
+            for x in range(width):
+                old_pixel = img_array[y, x].copy()
+                
+                # Find the closest color from the e-ink palette
+                new_pixel = self._find_closest_color(old_pixel, eink_colors)
+                img_array[y, x] = new_pixel
+                
+                # Calculate quantization error
+                quant_error = old_pixel - new_pixel
+                
+                # Distribute error to neighboring pixels using Floyd-Steinberg weights
+                if x + 1 < width:
+                    img_array[y, x + 1] += quant_error * 7/16
+                if y + 1 < height:
+                    if x - 1 >= 0:
+                        img_array[y + 1, x - 1] += quant_error * 3/16
+                    img_array[y + 1, x] += quant_error * 5/16
+                    if x + 1 < width:
+                        img_array[y + 1, x + 1] += quant_error * 1/16
+        
+        # Clamp values to valid range and convert back to PIL Image
+        img_array = np.clip(img_array, 0, 255).astype(np.uint8)
+        return Image.fromarray(img_array, 'RGB')
+    
+    def _find_closest_color(self, pixel: np.ndarray, color_palette: List[tuple]) -> np.ndarray:
+        """Find the closest color in the palette using Euclidean distance"""
+        min_distance = float('inf')
+        closest_color = color_palette[0]
+        
+        for color in color_palette:
+            # Calculate Euclidean distance in RGB space
+            distance = np.sqrt(np.sum((pixel - np.array(color)) ** 2))
+            if distance < min_distance:
+                min_distance = distance
+                closest_color = color
+        
+        return np.array(closest_color, dtype=np.float32)
     
     def _create_fallback_color_image(self, weather_summary: str, events: List[Dict]) -> Image.Image:
         """Create a fallback image when AI generation is not available"""
@@ -255,7 +405,8 @@ class DisplayService:
                 if y_pos > self.COLOR_HEIGHT - 50:
                     break
         
-        return image
+        # Apply Floyd-Steinberg dithering to fallback image as well
+        return self._apply_floyd_steinberg_dithering(image)
     
     def create_bw_display_image(self) -> Image.Image:
         """Create B&W display image with weather and calendar info"""
@@ -274,7 +425,7 @@ class DisplayService:
         # Get data
         try:
             weather = self.weather_service.get_current_weather()
-            events = self.calendar_service.get_upcoming_events(days=3)
+            events = self.calendar_service.get_upcoming_events(days_ahead=3)
         except:
             weather = {'temperature': '?', 'description': 'Weather unavailable'}
             events = []

@@ -6,6 +6,7 @@ Pillow>=10.0.0
 python-dotenv>=1.0.0
 APScheduler>=3.10.0
 google-generativeai>=0.3.0
+google-genai>=0.6.0
 pytz>=2023.3
 vobject>=0.9.6
 RPi.GPIO>=0.7.0
