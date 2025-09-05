@@ -292,6 +292,26 @@ void processI2CData() {
     Serial.printf("Weather: %s\n", currentData.weather.description);
     Serial.printf("Location: %s\n", currentData.weather.location);
     Serial.printf("Events: %d\n", currentData.event_count);
+    
+    // Debug calendar events
+    Serial.println("=== Calendar Events ===");
+    for (int i = 0; i < currentData.event_count && i < 6; i++) {
+      CalendarEvent& event = currentData.events[i];
+      Serial.printf("Event %d: '%s'\n", i+1, event.title);
+      Serial.printf("  Location: '%s'\n", event.location);
+      Serial.printf("  Start time: %u\n", event.start_time);
+      Serial.printf("  Valid: %s\n", event.valid ? "yes" : "no");
+      
+      // Convert timestamp to readable format
+      if (event.start_time > 0) {
+        time_t eventTime = event.start_time;
+        struct tm* timeInfo = localtime(&eventTime);
+        Serial.printf("  Readable time: %02d/%02d %02d:%02d\n", 
+                      timeInfo->tm_mon + 1, timeInfo->tm_mday,
+                      timeInfo->tm_hour, timeInfo->tm_min);
+      }
+    }
+    
     Serial.printf("Data hash: 0x%08X\n", newHash);
     
     // Check if data changed

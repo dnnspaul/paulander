@@ -554,11 +554,13 @@ class DisplayService:
         print(f"Weather data ends at offset: {weather_end}")
         
         # Calendar events - each should be 101 bytes, but may be padded
+        print(f"DEBUG: Packing {len(self.cached_calendar_data)} calendar events:")
         for i in range(6):
             event_start = offset
             
             if i < len(self.cached_calendar_data):
                 event = self.cached_calendar_data[i]
+                print(f"DEBUG: Event {i+1}: '{event['title']}' at {event['start_time']} location: '{event['location']}' valid: {event['valid']}")
                 
                 # char title[64] (64 bytes)
                 title_bytes = event['title'].encode('utf-8')[:63]
@@ -566,7 +568,8 @@ class DisplayService:
                 offset += 64
                 
                 # char location[32] (32 bytes)
-                event_loc_bytes = event['location'].encode('utf-8')[:31]
+                event_loc = event['location'] if event['location'] != 'None' else ''
+                event_loc_bytes = event_loc.encode('utf-8')[:31]
                 data[offset:offset+32] = event_loc_bytes.ljust(32, b'\x00')
                 offset += 32
                 
@@ -577,8 +580,11 @@ class DisplayService:
                 # bool valid (1 byte)
                 struct.pack_into('B', data, offset, 1 if event['valid'] else 0)
                 offset += 1
+                
+                print(f"DEBUG: Event {i+1} packed at offset {event_start}-{offset-1} ({offset-event_start} bytes)")
             else:
                 # Empty event slot - fill with zeros
+                print(f"DEBUG: Event {i+1}: Empty slot")
                 data[offset:offset+101] = b'\x00' * 101
                 offset += 101
             
@@ -591,6 +597,7 @@ class DisplayService:
         
         # uint8_t event_count (1 byte)
         event_count = min(len(self.cached_calendar_data), 6)
+        print(f"DEBUG: Setting event_count to {event_count} at offset {offset}")
         struct.pack_into('B', data, offset, event_count)
         offset += 1
         
@@ -603,7 +610,9 @@ class DisplayService:
         offset += 4
         
         # uint32_t timestamp (4 bytes)
-        struct.pack_into('<I', data, offset, int(time.time()))
+        current_timestamp = int(time.time())
+        print(f"DEBUG: Setting timestamp to {current_timestamp} at offset {offset-4}")
+        struct.pack_into('<I', data, offset, current_timestamp)
         offset += 4
         
         print(f"Final data size: {len(data)} bytes, used: {offset} bytes")
