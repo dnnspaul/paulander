@@ -12,6 +12,7 @@ from google.genai import types
 import struct
 import time
 import pytz
+import hashlib
 from src.services.config_service import ConfigService
 from src.services.weather_service import WeatherService
 from src.services.calendar_service import CalendarService
@@ -550,12 +551,17 @@ class DisplayService:
             "timestamp": int(time.time())  # Current timestamp for data freshness
         }
         
+        # Calculate hash for change detection
+        data_hash = self._calculate_data_hash(json_data)
+        json_data["data_hash"] = data_hash
+        
         # Convert to JSON string and encode to bytes
         json_string = json.dumps(json_data, separators=(',', ':'))  # Compact JSON
         json_bytes = json_string.encode('utf-8')
         
         print(f"JSON data prepared: {len(json_bytes)} bytes")
         print(f"Event count: {len(events_data)}")
+        print(f"Data hash: {data_hash}")
         print(f"JSON preview (first 100 chars): {json_string[:100]}...")
         
         return json_bytes
@@ -601,6 +607,15 @@ class DisplayService:
         sanitized = ''.join(char if ord(char) < 128 else '?' for char in sanitized)
         
         return sanitized
+    
+    def _calculate_data_hash(self, json_data: dict) -> str:
+        """Calculate a hash of the JSON data for change detection"""
+        # Create a consistent string representation for hashing
+        # Sort keys to ensure consistent ordering
+        json_string = json.dumps(json_data, sort_keys=True, separators=(',', ':'))
+        # Calculate SHA256 hash and return first 8 characters (32-bit equivalent)
+        hash_object = hashlib.sha256(json_string.encode('utf-8'))
+        return hash_object.hexdigest()[:8]
     
     def _create_mock_bw_display(self):
         """Create mock B&W display output when I2C is not available"""

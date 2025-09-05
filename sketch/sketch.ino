@@ -48,7 +48,8 @@ struct DisplayData {
   WeatherData weather;
   CalendarEvent events[6];  // Max 6 events
   uint8_t event_count;
-  uint32_t data_hash;  // Hash to detect changes
+  uint32_t data_hash;  // Local hash to detect changes
+  char received_hash[16];  // Hash received from Python backend
   uint32_t timestamp;
 };
 
@@ -60,6 +61,7 @@ bool displayNeedsUpdate = false;
 bool displayInitialized = false;
 unsigned long lastDisplayUpdate = 0;
 const unsigned long DISPLAY_UPDATE_INTERVAL = 1800000;  // 30 minutes in ms
+uint32_t skippedUpdates = 0;  // Counter for skipped updates due to hash matching
 
 // I2C receive buffer - 2KB to handle complete data structure with headroom
 uint8_t i2cBuffer[2048];  // 2KB buffer for reliable data reception
@@ -99,6 +101,10 @@ void setup() {
   // Initialize data structures
   memset(&currentData, 0, sizeof(DisplayData));
   memset(&previousData, 0, sizeof(DisplayData));
+  
+  // Initialize hash fields
+  strcpy(currentData.received_hash, "initial");
+  strcpy(previousData.received_hash, "none");
 
   // Initialize I2C timing
   lastReceiveTime = millis();
@@ -140,8 +146,16 @@ void loop() {
   }
 
   // Check if display needs update
-  if (displayNeedsUpdate || (millis() - lastDisplayUpdate > DISPLAY_UPDATE_INTERVAL)) {
+  bool timeBasedUpdate = (millis() - lastDisplayUpdate > DISPLAY_UPDATE_INTERVAL);
+  
+  if (displayNeedsUpdate || timeBasedUpdate) {
     if (dataReceived && displayInitialized) {
+      if (displayNeedsUpdate) {
+        Serial.println("Display update triggered by data change");
+      } else if (timeBasedUpdate) {
+        Serial.println("Display update triggered by time interval (30 min)");
+      }
+      
       updateDisplay();
       displayNeedsUpdate = false;
       lastDisplayUpdate = millis();
@@ -154,7 +168,7 @@ void loop() {
     if (receivingMultipart) {
       Serial.printf("ESP32 running... (receiving multipart: %d bytes received)\n", totalDataReceived);
     } else {
-      Serial.println("ESP32 running... waiting for I2C data");
+      Serial.printf("ESP32 running... (data received: %s, skipped updates: %u)\n", dataReceived ? "yes" : "no", skippedUpdates);
     }
     lastKeepAlive = millis();
   }
@@ -374,6 +388,10 @@ void processI2CData() {
     }
 
     currentData.timestamp = doc["timestamp"];
+    
+    // Extract received hash from Python backend
+    strncpy(currentData.received_hash, doc["data_hash"] | "", sizeof(currentData.received_hash) - 1);
+    currentData.received_hash[sizeof(currentData.received_hash) - 1] = '\0';  // Ensure null termination
 
     // Calculate hash of current data for change detection
     uint32_t newHash = calculateDataHash(&currentData);
@@ -409,16 +427,29 @@ void processI2CData() {
       }
     }
 
-    Serial.printf("Data hash: 0x%08X\n", newHash);
+    Serial.printf("Local data hash: 0x%08X\n", newHash);
+    Serial.printf("Received hash: %s\n", currentData.received_hash);
 
-    // Check if data changed
-    if (newHash != previousData.data_hash) {
-      Serial.println("✓ Data changed - display update needed");
+    // Enhanced change detection using both local hash and received hash
+    bool localHashChanged = (newHash != previousData.data_hash);
+    bool receivedHashChanged = (strcmp(currentData.received_hash, previousData.received_hash) != 0);
+    
+    if (localHashChanged || receivedHashChanged) {
+      if (localHashChanged && receivedHashChanged) {
+        Serial.println("✓ Data changed (both local and received hash) - display update needed");
+      } else if (localHashChanged) {
+        Serial.println("✓ Data changed (local hash) - display update needed");
+      } else {
+        Serial.println("✓ Data changed (received hash) - display update needed");
+      }
+      
       displayNeedsUpdate = true;
       previousData = currentData;
       previousData.data_hash = newHash;
+      strncpy(previousData.received_hash, currentData.received_hash, sizeof(previousData.received_hash));
     } else {
-      Serial.println("✓ Data unchanged - no display update needed");
+      skippedUpdates++;
+      Serial.printf("✓ Data unchanged (both hashes match) - no display update needed (skipped: %u)\n", skippedUpdates);
     }
 
     currentData.data_hash = newHash;
@@ -469,7 +500,14 @@ void showStartupMessage() {
 void updateDisplay() {
   if (!dataReceived || !displayInitialized) return;
 
+  // Additional safety check - only update if we truly have new data
+  if (!displayNeedsUpdate) {
+    Serial.println("=== Display update skipped - no changes detected ===");
+    return;
+  }
+
   Serial.println("=== Updating B&W Display ===");
+  Serial.printf("Updating display due to data changes (hash: %s)\n", currentData.received_hash);
 
   display.fillScreen(GxEPD_WHITE);
   display.setTextColor(GxEPD_BLACK);
@@ -607,6 +645,6 @@ void drawFooter() {
   display.printf("Aktualisiert: %02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);
   
   // ESP32 status - positioned for narrower display
-  display.setCursor(display.width()-30, display.height()-25);
+  display.setCursor(display.width()-50, display.height()-25);
   display.print("<3");
 }
