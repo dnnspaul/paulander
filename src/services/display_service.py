@@ -445,9 +445,9 @@ class DisplayService:
             # Wait a moment to ensure ESP32 is ready for new transmission
             time.sleep(0.1)
             
-            # Send data in chunks (I2C has strict limits)
-            # Use 31 bytes per chunk to account for register byte in smbus2
-            chunk_size = 31
+            # Send data in smaller chunks for better reliability
+            # Use 15 bytes per chunk to ensure reliable transmission
+            chunk_size = 15
             total_chunks = (len(data) + chunk_size - 1) // chunk_size
             print(f"Sending {total_chunks} chunks of max {chunk_size} bytes each...")
             
@@ -489,8 +489,8 @@ class DisplayService:
                     print("✗ Stopping transmission due to chunk failure")
                     break
                 
-                # Longer delay between chunks for ESP32 processing
-                time.sleep(0.02)  # 20ms delay between chunks
+                # Longer delay between chunks for ESP32 processing  
+                time.sleep(0.05)  # 50ms delay between chunks for more reliable transmission
             
             print(f"✓ Transmission completed: {chunks_sent}/{total_chunks} chunks sent ({total_bytes_sent} total bytes)")
             

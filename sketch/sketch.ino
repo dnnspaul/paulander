@@ -103,7 +103,7 @@ void loop() {
   
   // Check for I2C receive timeout
   static unsigned long lastReceiveTime = millis();
-  if (receivingMultipart && (millis() - lastReceiveTime > 10000)) {  // Increased to 10 seconds
+  if (receivingMultipart && (millis() - lastReceiveTime > 15000)) {  // Increased to 15 seconds
     Serial.printf("I2C receive timeout - received %d bytes (expected: %d)\n", totalDataReceived, sizeof(DisplayData));
     
     // If we received close to expected amount, try to process it
@@ -194,6 +194,12 @@ void initializeDisplay() {
 
 void onI2CReceive(int length) {
   if (length > 0) {
+    // If this is the first chunk of a new transmission, clear buffer
+    if (totalDataReceived == 0) {
+      memset(i2cBuffer, 0, sizeof(i2cBuffer));
+      Serial.println("Starting new I2C transmission - buffer cleared");
+    }
+    
     // Read all available bytes
     int bytesRead = 0;
     while (Wire.available() && (totalDataReceived + bytesRead) < sizeof(i2cBuffer)) {
