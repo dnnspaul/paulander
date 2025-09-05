@@ -17,19 +17,30 @@ else:
 
 try:
     print("Testing imports...")
+    print(f"Python executable: {sys.executable}")
     
     # Test required libraries
     import RPi.GPIO as GPIO
-    print("✓ RPi.GPIO imported successfully")
+    print(f"✓ RPi.GPIO imported successfully from: {GPIO.__file__}")
     
     import spidev
-    print("✓ spidev imported successfully")
+    print(f"✓ spidev imported successfully from: {spidev.__file__}")
     
     import numpy
-    print("✓ numpy imported successfully")
+    print(f"✓ numpy imported successfully from: {numpy.__file__}")
     
     import PIL
-    print("✓ PIL imported successfully")
+    print(f"✓ PIL imported successfully from: {PIL.__file__}")
+    
+    import gpiozero
+    print(f"✓ gpiozero imported successfully from: {gpiozero.__file__}")
+    
+    # Check for lgpio (optional, newer GPIO library)
+    try:
+        import lgpio
+        print(f"✓ lgpio available from: {lgpio.__file__}")
+    except ImportError:
+        print("! lgpio not available (this is OK, will fall back to RPi.GPIO)")
     
     # Test Waveshare library import
     print("\nImporting Waveshare library...")
