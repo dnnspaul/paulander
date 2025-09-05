@@ -524,7 +524,10 @@ class DisplayService:
         
         print(f"Final data size: {len(data)} bytes, used: {offset} bytes")
         print(f"Temperature packed: {struct.unpack('<f', data[0:4])[0]:.1f}°C")
-        print(f"Description: {data[4:68].rstrip(b'\\x00').decode('utf-8', errors='ignore')}")
+        
+        # Extract description safely for f-string
+        desc_bytes = data[4:68].rstrip(b'\x00').decode('utf-8', errors='ignore')
+        print(f"Description: {desc_bytes}")
         
         return data
     
