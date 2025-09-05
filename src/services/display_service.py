@@ -49,14 +49,9 @@ class DisplayService:
         
         # Initialize color display
         self.color_epd = None
+        self.display_initialized = False
         if epd7in3e:
             try:
-                # Clean up any existing GPIO state first
-                try:
-                    epd7in3e.epdconfig.module_exit(cleanup=True)
-                except:
-                    pass
-                
                 self.color_epd = epd7in3e.EPD()
                 print("Color display initialized successfully")
             except Exception as e:
@@ -129,28 +124,73 @@ class DisplayService:
             
             if self.color_epd:
                 print("Hardware display detected, initializing...")
-                # Initialize display
-                self.color_epd.init()
-                print("✓ Display initialized")
                 
-                self.color_epd.Clear()
-                print("✓ Display cleared")
-                
-                # Display the image
-                print("Converting image to display buffer...")
-                buffer = self.color_epd.getbuffer(image)
-                print(f"✓ Buffer created, size: {len(buffer) if buffer else 'None'} bytes")
-                
-                print("Sending image to display...")
-                self.color_epd.display(buffer)
-                print("✓ Image sent to display")
-                
-                # Put display to sleep to save power
-                print("Putting display to sleep...")
-                self.color_epd.sleep()
-                print("✓ Display in sleep mode")
-                
-                print("✓ Color display updated successfully")
+                try:
+                    # Initialize display with proper error handling
+                    if not self.display_initialized:
+                        print("First time initialization, cleaning up any previous state...")
+                        try:
+                            epd7in3e.epdconfig.module_exit(cleanup=True)
+                        except:
+                            pass
+                        
+                    print("Initializing display hardware...")
+                    self.color_epd.init()
+                    self.display_initialized = True
+                    print("✓ Display initialized")
+                    
+                    print("Clearing display...")
+                    self.color_epd.Clear()
+                    print("✓ Display cleared")
+                    
+                    # Display the image
+                    print("Converting image to display buffer...")
+                    buffer = self.color_epd.getbuffer(image)
+                    print(f"✓ Buffer created, size: {len(buffer) if buffer else 'None'} bytes")
+                    
+                    print("Sending image to display...")
+                    self.color_epd.display(buffer)
+                    print("✓ Image sent to display")
+                    
+                    # Put display to sleep to save power
+                    print("Putting display to sleep...")
+                    self.color_epd.sleep()
+                    print("✓ Display in sleep mode")
+                    
+                    print("✓ Color display updated successfully")
+                    
+                except Exception as gpio_error:
+                    print(f"✗ GPIO/Display error: {gpio_error}")
+                    
+                    # Try to recover by reinitializing the entire display
+                    print("Attempting display recovery...")
+                    try:
+                        # Clean up completely
+                        epd7in3e.epdconfig.module_exit(cleanup=True)
+                        
+                        # Reinitialize the display object
+                        self.color_epd = epd7in3e.EPD()
+                        self.display_initialized = False
+                        
+                        # Try initialization again
+                        self.color_epd.init()
+                        self.display_initialized = True
+                        print("✓ Display recovery successful")
+                        
+                        # Now try the display operation again
+                        self.color_epd.Clear()
+                        buffer = self.color_epd.getbuffer(image)
+                        self.color_epd.display(buffer)
+                        self.color_epd.sleep()
+                        print("✓ Color display updated successfully after recovery")
+                        
+                    except Exception as recovery_error:
+                        print(f"✗ Display recovery failed: {recovery_error}")
+                        # Save image as fallback
+                        filename = 'color_display_output_gpio_error.png'
+                        image.save(filename)
+                        print(f"✓ Image saved as {filename} due to GPIO error")
+                        raise Exception(f"Display hardware error: {gpio_error}")
             else:
                 # Save image for testing
                 filename = 'color_display_output.png'
@@ -590,6 +630,7 @@ Make it vintage-poster style. Let it only generate an image without any title, d
         try:
             if epd7in3e:
                 epd7in3e.epdconfig.module_exit(cleanup=True)
+                self.display_initialized = False
                 print("Display GPIO cleanup completed")
         except Exception as e:
             print(f"Error during cleanup: {e}")

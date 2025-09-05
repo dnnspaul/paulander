@@ -84,6 +84,7 @@ python run.py
 - `POST /api/display/test-ai-image` - Test AI image generation with dithering
 - `POST /api/display/test-dithering` - Test Floyd-Steinberg dithering algorithm  
 - `POST /api/display/debug-gemini` - Debug Gemini API connection and configuration
+- `POST /api/display/test-hardware` - Test display hardware with simple image
 
 For detailed hardware setup and configuration, see CLAUDE.md.
 

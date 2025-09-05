@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from PIL import Image, ImageDraw
+from datetime import datetime
 from src.services.calendar_service import CalendarService
 from src.services.weather_service import WeatherService
 from src.services.config_service import ConfigService
@@ -157,3 +158,47 @@ def debug_gemini():
             'traceback': traceback.format_exc(),
             'api_key_present': bool(config_service.get('gemini_api_key'))
         }), 500
+
+@api_bp.route('/display/test-hardware', methods=['POST'])
+def test_display_hardware():
+    """Test display hardware without AI generation"""
+    try:
+        # Create a simple test image
+        test_image = Image.new('RGB', (800, 480), 'white')
+        draw = ImageDraw.Draw(test_image)
+        draw.text((50, 50), "Hardware Test Image", fill='black')
+        draw.text((50, 100), f"Generated at: {datetime.now()}", fill='red')
+        draw.rectangle([50, 150, 750, 430], outline='blue', width=3)
+        
+        # Apply dithering
+        dithered_image = display_service._apply_floyd_steinberg_dithering(test_image)
+        
+        # Try to display it
+        if display_service.color_epd:
+            # Reset display initialization state
+            display_service.display_initialized = False
+            
+            # Attempt hardware display
+            try:
+                display_service.color_epd.init()
+                display_service.display_initialized = True
+                display_service.color_epd.Clear()
+                buffer = display_service.color_epd.getbuffer(dithered_image)
+                display_service.color_epd.display(buffer)
+                display_service.color_epd.sleep()
+                
+                dithered_image.save('test_hardware_success.png')
+                return jsonify({'message': 'Hardware display test successful', 'image_saved': 'test_hardware_success.png'})
+                
+            except Exception as hw_error:
+                dithered_image.save('test_hardware_failed.png')
+                return jsonify({
+                    'error': f'Hardware display test failed: {str(hw_error)}',
+                    'image_saved': 'test_hardware_failed.png'
+                }), 500
+        else:
+            dithered_image.save('test_hardware_mock.png')
+            return jsonify({'message': 'No hardware display available, test image saved', 'image_saved': 'test_hardware_mock.png'})
+            
+    except Exception as e:
+        return jsonify({'error': f'Display hardware test failed: {str(e)}'}), 500
