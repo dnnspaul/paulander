@@ -8,6 +8,8 @@ from io import BytesIO
 import google.generativeai as genai
 from google import genai as genai_new
 from google.genai import types
+import struct
+import time
 from src.services.config_service import ConfigService
 from src.services.weather_service import WeatherService
 from src.services.calendar_service import CalendarService
@@ -18,6 +20,17 @@ sys.path.append(waveshare_lib_path)
 
 # Check if we should force mock mode (useful for development)
 FORCE_MOCK_DISPLAY = os.getenv('FORCE_MOCK_DISPLAY', 'false').lower() == 'true'
+
+# I2C configuration
+ESP32_I2C_ADDRESS = 0x42
+I2C_BUS = 1  # RPi I2C bus number
+
+# Try to import I2C libraries
+try:
+    import smbus2
+    I2C_AVAILABLE = True
+except ImportError:
+    I2C_AVAILABLE = False
 
 # Global variables for lazy loading
 epd7in3e = None
@@ -77,6 +90,19 @@ class DisplayService:
         # Initialize color display (lazy loaded)
         self.color_epd = None
         self.display_initialized = False
+        
+        # I2C communication
+        self.i2c_bus = None
+        self.i2c_initialized = False
+        
+        # Data caching for B&W display
+        self.cached_weather_data = None
+        self.cached_calendar_data = None
+        self.last_api_fetch = 0
+        self.last_i2c_send = 0
+        self.API_CACHE_DURATION = 1800  # 30 minutes in seconds
+        self.I2C_SEND_INTERVAL = 30     # 30 seconds
+        
         # Don't load the display module during init - wait until actually needed
         print("Display service initialized (hardware will be loaded on first use)")
     
@@ -100,6 +126,28 @@ class DisplayService:
         else:
             print("✗ Waveshare module not available, display functions will be mocked")
             self.color_epd = None
+    
+    def _ensure_i2c_initialized(self):
+        """Ensure I2C bus is initialized for ESP32 communication"""
+        if self.i2c_initialized:
+            return True
+        
+        if not I2C_AVAILABLE:
+            print("✗ smbus2 not available, I2C communication will be mocked")
+            return False
+        
+        if FORCE_MOCK_DISPLAY:
+            print("✗ FORCE_MOCK_DISPLAY enabled, I2C communication will be mocked")
+            return False
+        
+        try:
+            self.i2c_bus = smbus2.SMBus(I2C_BUS)
+            self.i2c_initialized = True
+            print(f"✓ I2C bus {I2C_BUS} initialized for ESP32 communication")
+            return True
+        except Exception as e:
+            print(f"✗ Failed to initialize I2C: {e}")
+            return False
 
     def get_status(self) -> Dict[str, str]:
         """Get display status"""
@@ -271,19 +319,183 @@ class DisplayService:
     def update_bw_display(self):
         """Update the B&W display via ESP32 with weather and calendar info"""
         try:
-            # Create B&W display content
-            image = self.create_bw_display_image()
+            print("=== Starting B&W display update ===")
             
-            # In a real implementation, this would send data to ESP32 via I2C
-            # For now, we'll save the image
-            image.save('bw_display_output.png')
-            print("B&W display mocked - image saved as bw_display_output.png")
-            print("In production: This data would be sent to ESP32 via I2C")
+            # Check if we need to fetch fresh data from APIs (every 30 minutes)
+            current_time = time.time()
+            if (current_time - self.last_api_fetch) >= self.API_CACHE_DURATION:
+                print("Fetching fresh data from APIs...")
+                self._fetch_and_cache_data()
+                self.last_api_fetch = current_time
+            else:
+                print("Using cached data (API cache still valid)")
+            
+            # Send data to ESP32 via I2C (every 30 seconds)
+            if (current_time - self.last_i2c_send) >= self.I2C_SEND_INTERVAL:
+                print("Sending data to ESP32 via I2C...")
+                self._send_data_to_esp32()
+                self.last_i2c_send = current_time
+            else:
+                print("I2C send interval not reached yet")
             
             self._set_last_refresh_time('bw')
+            print("✓ B&W display update completed")
             
         except Exception as e:
+            print(f"✗ B&W display update failed: {e}")
             raise Exception(f"B&W display update failed: {str(e)}")
+    
+    def _fetch_and_cache_data(self):
+        """Fetch fresh weather and calendar data from APIs and cache it"""
+        try:
+            # Fetch weather data
+            print("Fetching weather data...")
+            weather = self.weather_service.get_current_weather()
+            self.cached_weather_data = {
+                'temperature': weather.get('temperature', 0.0),
+                'description': weather.get('description', 'N/A')[:63],  # Limit to 63 chars
+                'location': weather.get('location', '')[:31],  # Limit to 31 chars
+                'timestamp': int(time.time())
+            }
+            print(f"✓ Weather cached: {self.cached_weather_data['temperature']}°C, {self.cached_weather_data['description']}")
+            
+            # Fetch calendar data
+            print("Fetching calendar events...")
+            events = self.calendar_service.get_upcoming_events(days_ahead=3)
+            self.cached_calendar_data = []
+            
+            for i, event in enumerate(events[:6]):  # Limit to 6 events
+                event_data = {
+                    'title': event.get('title', '')[:63],  # Limit to 63 chars
+                    'location': event.get('location', '')[:31],  # Limit to 31 chars
+                    'start_time': int(event['start'].timestamp()) if event.get('start') else 0,
+                    'valid': bool(event.get('title'))
+                }
+                self.cached_calendar_data.append(event_data)
+            
+            print(f"✓ Calendar cached: {len(self.cached_calendar_data)} events")
+            
+        except Exception as e:
+            print(f"✗ Error fetching API data: {e}")
+            # Use fallback data if APIs fail
+            if not self.cached_weather_data:
+                self.cached_weather_data = {
+                    'temperature': 0.0,
+                    'description': 'Weather unavailable',
+                    'location': '',
+                    'timestamp': int(time.time())
+                }
+            if not self.cached_calendar_data:
+                self.cached_calendar_data = []
+    
+    def _send_data_to_esp32(self):
+        """Send cached weather and calendar data to ESP32 via I2C"""
+        if not self.cached_weather_data:
+            print("✗ No cached weather data to send")
+            return
+        
+        # Initialize I2C if needed
+        if not self._ensure_i2c_initialized():
+            print("✗ I2C not available, saving mock data instead")
+            self._create_mock_bw_display()
+            return
+        
+        try:
+            # Prepare data structure matching ESP32 expectations
+            data = self._prepare_esp32_data()
+            
+            # Send data via I2C
+            print(f"Sending {len(data)} bytes to ESP32 at address 0x{ESP32_I2C_ADDRESS:02X}")
+            
+            # Send data in chunks if needed (I2C has buffer limitations)
+            chunk_size = 32  # Common I2C buffer size
+            for i in range(0, len(data), chunk_size):
+                chunk = data[i:i+chunk_size]
+                self.i2c_bus.write_i2c_block_data(ESP32_I2C_ADDRESS, i, chunk)
+                time.sleep(0.01)  # Small delay between chunks
+            
+            # Read ESP32 status
+            try:
+                status = self.i2c_bus.read_byte(ESP32_I2C_ADDRESS)
+                print(f"✓ ESP32 status: {'Data received' if status == 1 else 'Waiting for data'}")
+            except:
+                print("✓ Data sent (status read failed)")
+            
+        except Exception as e:
+            print(f"✗ I2C communication failed: {e}")
+            print("Falling back to mock display")
+            self._create_mock_bw_display()
+    
+    def _prepare_esp32_data(self):
+        """Prepare data structure for ESP32 communication"""
+        # Create binary data structure matching the ESP32 sketch
+        data = bytearray()
+        
+        # Weather data (4 + 64 + 32 + 4 = 104 bytes)
+        temp_bytes = struct.pack('<f', float(self.cached_weather_data['temperature']))
+        data.extend(temp_bytes)
+        
+        # Pad strings to fixed lengths
+        desc = self.cached_weather_data['description'].encode('utf-8')[:63]
+        desc = desc.ljust(64, b'\x00')
+        data.extend(desc)
+        
+        location = self.cached_weather_data['location'].encode('utf-8')[:31]
+        location = location.ljust(32, b'\x00')
+        data.extend(location)
+        
+        timestamp_bytes = struct.pack('<I', self.cached_weather_data['timestamp'])
+        data.extend(timestamp_bytes)
+        
+        # Calendar events (6 events * (64 + 32 + 4 + 1) = 606 bytes)
+        for i in range(6):
+            if i < len(self.cached_calendar_data):
+                event = self.cached_calendar_data[i]
+                
+                title = event['title'].encode('utf-8')[:63]
+                title = title.ljust(64, b'\x00')
+                data.extend(title)
+                
+                loc = event['location'].encode('utf-8')[:31]
+                loc = loc.ljust(32, b'\x00')
+                data.extend(loc)
+                
+                start_time_bytes = struct.pack('<I', event['start_time'])
+                data.extend(start_time_bytes)
+                
+                valid_byte = struct.pack('B', 1 if event['valid'] else 0)
+                data.extend(valid_byte)
+            else:
+                # Empty event slot
+                data.extend(b'\x00' * 101)  # 64 + 32 + 4 + 1
+        
+        # Event count (1 byte)
+        event_count = min(len(self.cached_calendar_data), 6)
+        data.extend(struct.pack('B', event_count))
+        
+        # Data hash (4 bytes) - will be calculated by ESP32
+        data.extend(struct.pack('<I', 0))
+        
+        # Current timestamp (4 bytes)
+        current_timestamp_bytes = struct.pack('<I', int(time.time()))
+        data.extend(current_timestamp_bytes)
+        
+        print(f"Prepared ESP32 data: {len(data)} bytes total")
+        return data
+    
+    def _create_mock_bw_display(self):
+        """Create mock B&W display output when I2C is not available"""
+        try:
+            if not self.cached_weather_data:
+                print("✗ No cached data for mock display")
+                return
+            
+            image = self.create_bw_display_image()
+            image.save('bw_display_output.png')
+            print("✓ B&W display mocked - image saved as bw_display_output.png")
+            
+        except Exception as e:
+            print(f"✗ Mock display creation failed: {e}")
     
     def generate_daily_image(self) -> Image.Image:
         """Generate AI image based on calendar events and weather"""
@@ -615,7 +827,7 @@ Make it vintage-poster style. Let it only generate an image without any title, d
         return self._apply_floyd_steinberg_dithering(image)
     
     def create_bw_display_image(self) -> Image.Image:
-        """Create B&W display image with weather and calendar info"""
+        """Create B&W display image with weather and calendar info using cached data"""
         # Create image with white background
         image = Image.new('1', (self.BW_WIDTH, self.BW_HEIGHT), 1)  # '1' mode for 1-bit pixels
         draw = ImageDraw.Draw(image)
@@ -628,19 +840,44 @@ Make it vintage-poster style. Let it only generate an image without any title, d
         except:
             large_font = medium_font = small_font = ImageFont.load_default()
         
-        # Get data
-        try:
-            weather = self.weather_service.get_current_weather()
-            events = self.calendar_service.get_upcoming_events(days_ahead=3)
-        except:
-            weather = {'temperature': '?', 'description': 'Weather unavailable'}
-            events = []
+        # Use cached data if available, otherwise fetch fresh data
+        if self.cached_weather_data:
+            weather = self.cached_weather_data
+        else:
+            try:
+                weather_raw = self.weather_service.get_current_weather()
+                weather = {
+                    'temperature': weather_raw.get('temperature', '?'),
+                    'description': weather_raw.get('description', 'N/A'),
+                    'location': weather_raw.get('location', '')
+                }
+            except:
+                weather = {'temperature': '?', 'description': 'Weather unavailable', 'location': ''}
+        
+        if self.cached_calendar_data:
+            events = self.cached_calendar_data
+        else:
+            try:
+                events_raw = self.calendar_service.get_upcoming_events(days_ahead=3)
+                events = []
+                for event in events_raw[:6]:
+                    events.append({
+                        'title': event.get('title', ''),
+                        'location': event.get('location', ''),
+                        'start_time': int(event['start'].timestamp()) if event.get('start') else 0,
+                        'valid': bool(event.get('title'))
+                    })
+            except:
+                events = []
         
         # Draw weather section
-        draw.text((20, 20), f"{weather.get('temperature', '?')}°C", fill=0, font=large_font)
+        temp_str = f"{weather.get('temperature', '?')}"
+        if isinstance(weather.get('temperature'), (int, float)):
+            temp_str = f"{weather['temperature']:.1f}"
+        draw.text((20, 20), f"{temp_str}°C", fill=0, font=large_font)
         draw.text((20, 60), weather.get('description', 'N/A'), fill=0, font=medium_font)
         
-        if 'location' in weather:
+        if weather.get('location'):
             draw.text((20, 90), weather['location'], fill=0, font=small_font)
         
         # Draw line separator
@@ -650,25 +887,34 @@ Make it vintage-poster style. Let it only generate an image without any title, d
         draw.text((20, 150), "Upcoming Events:", fill=0, font=medium_font)
         
         y_pos = 190
-        for event in events[:6]:  # Show max 6 events
+        valid_events = [e for e in events if e.get('valid', True)]
+        
+        for event in valid_events[:6]:  # Show max 6 events
             if y_pos > self.BW_HEIGHT - 40:
                 break
                 
             # Format event text
-            event_text = event['title'][:40] + ('...' if len(event['title']) > 40 else '')
+            event_title = event.get('title', '')
+            event_text = event_title[:40] + ('...' if len(event_title) > 40 else '')
             draw.text((20, y_pos), event_text, fill=0, font=small_font)
             
-            # Event time
-            if event['start']:
+            # Event time and location
+            if event.get('start_time', 0) > 0:
                 try:
-                    event_time = event['start'].strftime("%m/%d %H:%M")
-                    draw.text((20, y_pos + 20), event_time, fill=0, font=small_font)
+                    event_time = datetime.fromtimestamp(event['start_time'])
+                    time_str = event_time.strftime("%m/%d %H:%M")
+                    
+                    location_str = ""
+                    if event.get('location'):
+                        location_str = f" @ {event['location']}"
+                    
+                    draw.text((20, y_pos + 20), f"{time_str}{location_str}", fill=0, font=small_font)
                 except:
                     pass
             
             y_pos += 50
         
-        if not events:
+        if not valid_events:
             draw.text((20, 190), "No upcoming events", fill=0, font=small_font)
         
         return image

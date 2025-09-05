@@ -67,7 +67,7 @@ python run.py
 - **AI Image Generation**: Uses Gemini 2.5 Flash to create personalized vintage-style images based on weather and calendar events, optimized with high-performance vectorized Floyd-Steinberg dithering for e-ink displays
 - **Dual Displays**: 
   - Color display: Daily AI-generated vintage poster refresh at 6 AM (800x480, 6 colors)
-  - B&W display: Weather and calendar updates every 30 minutes
+  - B&W display: Weather and calendar updates via ESP32 I2C communication (API cache: 30min, I2C send: 30sec)
 - **Web Interface**: Mobile-first responsive configuration interface
 - **Robust Operation**: Automatic restarts and error handling
 
@@ -85,6 +85,8 @@ python run.py
 - `POST /api/display/test-dithering` - Test Floyd-Steinberg dithering algorithm  
 - `POST /api/display/debug-gemini` - Debug Gemini API connection and configuration
 - `POST /api/display/test-hardware` - Test display hardware with simple image
+- `POST /api/display/test-i2c` - Test I2C communication with ESP32
+- `POST /api/display/force-bw-update` - Force immediate B&W display update via ESP32
 
 For detailed hardware setup and configuration, see CLAUDE.md.
 

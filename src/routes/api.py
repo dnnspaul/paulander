@@ -206,3 +206,48 @@ def test_display_hardware():
             
     except Exception as e:
         return jsonify({'error': f'Display hardware test failed: {str(e)}'}), 500
+
+@api.route('/display/test-i2c', methods=['POST'])
+def test_i2c():
+    """Test I2C communication with ESP32"""
+    try:
+        display_service = DisplayService()
+        
+        # Force cache fresh data for testing
+        display_service._fetch_and_cache_data()
+        
+        # Test I2C communication
+        display_service._send_data_to_esp32()
+        
+        return jsonify({
+            'message': 'I2C test completed',
+            'cached_weather': display_service.cached_weather_data,
+            'cached_events_count': len(display_service.cached_calendar_data) if display_service.cached_calendar_data else 0,
+            'i2c_initialized': display_service.i2c_initialized
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'I2C test failed: {str(e)}'}), 500
+
+@api.route('/display/force-bw-update', methods=['POST'])
+def force_bw_update():
+    """Force immediate B&W display update (ignores timing intervals)"""
+    try:
+        display_service = DisplayService()
+        
+        # Reset timing to force immediate update
+        display_service.last_api_fetch = 0
+        display_service.last_i2c_send = 0
+        
+        # Trigger update
+        display_service.update_bw_display()
+        
+        return jsonify({
+            'message': 'B&W display update forced',
+            'weather_cached': display_service.cached_weather_data is not None,
+            'events_cached': display_service.cached_calendar_data is not None,
+            'i2c_available': display_service.i2c_initialized
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'B&W display update failed: {str(e)}'}), 500
