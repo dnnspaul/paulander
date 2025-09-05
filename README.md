@@ -80,3 +80,7 @@ python run.py
 - `GET /api/display/status` - Display status
 
 For detailed hardware setup and configuration, see CLAUDE.md.
+
+## Production Deployment
+
+For production use on Raspberry Pi, set `FLASK_ENV=production` in your `.env` file to disable debug mode and auto-reload, which can interfere with GPIO hardware initialization.

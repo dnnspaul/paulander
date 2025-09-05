@@ -47,10 +47,17 @@ class DisplayService:
         self.color_epd = None
         if epd7in3e:
             try:
+                # Clean up any existing GPIO state first
+                try:
+                    epd7in3e.epdconfig.module_exit(cleanup=True)
+                except:
+                    pass
+                
                 self.color_epd = epd7in3e.EPD()
                 print("Color display initialized successfully")
             except Exception as e:
                 print(f"Warning: Could not initialize color display: {e}")
+                print("This is normal during Flask debug mode restarts")
 
     def get_status(self) -> Dict[str, str]:
         """Get display status"""
