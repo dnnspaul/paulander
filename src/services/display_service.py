@@ -350,17 +350,27 @@ class DisplayService:
     def _fetch_and_cache_data(self):
         """Fetch fresh weather and calendar data from APIs and cache it"""
         try:
-            # Fetch weather data
-            print("Fetching weather data...")
-            weather = self.weather_service.get_current_weather()
+            # Fetch enhanced weather data (current temp, today min/max, tomorrow forecast)
+            print("Fetching enhanced weather data...")
+            weather = self.weather_service.get_enhanced_weather_for_display()
             
             self.cached_weather_data = {
-                'temperature': weather.get('temperature', 0.0),
-                'description': weather.get('description', 'N/A')[:63],  # Limit to 63 chars
+                'current_temperature': weather.get('current_temperature', 0.0),
+                'current_description': weather.get('current_description', 'N/A')[:63],  # Limit to 63 chars
+                'today_min': weather.get('today_min', 0.0),
+                'today_max': weather.get('today_max', 0.0),
+                'today_description': weather.get('today_description', 'N/A')[:63],
+                'tomorrow_min': weather.get('tomorrow_min'),
+                'tomorrow_max': weather.get('tomorrow_max'),
+                'tomorrow_description': weather.get('tomorrow_description', 'N/A')[:63] if weather.get('tomorrow_description') else None,
                 'location': weather.get('location', '')[:31],  # Limit to 31 chars
                 'timestamp': int(time.time())
             }
-            print(f"✓ Weather cached: {self.cached_weather_data['temperature']}°C, {self.cached_weather_data['description']}")
+            print(f"✓ Enhanced weather cached:")
+            print(f"  Current: {self.cached_weather_data['current_temperature']}°C, {self.cached_weather_data['current_description']}")
+            print(f"  Today: {self.cached_weather_data['today_min']}-{self.cached_weather_data['today_max']}°C, {self.cached_weather_data['today_description']}")
+            if self.cached_weather_data['tomorrow_min'] is not None:
+                print(f"  Tomorrow: {self.cached_weather_data['tomorrow_min']}-{self.cached_weather_data['tomorrow_max']}°C, {self.cached_weather_data['tomorrow_description']}")
             
             # Fetch calendar data
             print("Fetching calendar events...")
@@ -507,8 +517,8 @@ class DisplayService:
     
     def _prepare_esp32_data(self):
         """Prepare JSON data for ESP32 communication"""
-        print(f"Preparing JSON data for ESP32")
-        print(f"Weather: {self.cached_weather_data['temperature']}°C, {self.cached_weather_data['description']}")
+        print(f"Preparing enhanced JSON data for ESP32")
+        print(f"Weather - Current: {self.cached_weather_data['current_temperature']}°C, Today: {self.cached_weather_data['today_min']}-{self.cached_weather_data['today_max']}°C")
         
         # Prepare events data - only send the events we have
         events_data = []
@@ -521,11 +531,17 @@ class DisplayService:
             }
             events_data.append(event_data)
         
-        # Create complete data structure
+        # Create complete data structure with enhanced weather
         json_data = {
             "weather": {
-                "temperature": float(self.cached_weather_data['temperature']),
-                "description": self._sanitize_text_for_display(self.cached_weather_data['description'])[:63],
+                "current_temperature": float(self.cached_weather_data['current_temperature']),
+                "current_description": self._sanitize_text_for_display(self.cached_weather_data['current_description'])[:63],
+                "today_min": float(self.cached_weather_data['today_min']),
+                "today_max": float(self.cached_weather_data['today_max']),
+                "today_description": self._sanitize_text_for_display(self.cached_weather_data['today_description'])[:63],
+                "tomorrow_min": float(self.cached_weather_data['tomorrow_min']) if self.cached_weather_data['tomorrow_min'] is not None else None,
+                "tomorrow_max": float(self.cached_weather_data['tomorrow_max']) if self.cached_weather_data['tomorrow_max'] is not None else None,
+                "tomorrow_description": self._sanitize_text_for_display(self.cached_weather_data['tomorrow_description'])[:63] if self.cached_weather_data['tomorrow_description'] else None,
                 "location": self._sanitize_text_for_display(self.cached_weather_data['location'])[:31],
                 "timestamp": self.cached_weather_data['timestamp']
             },

@@ -148,6 +148,70 @@ class WeatherService:
             'wind_speed': round(sum(item['wind']['speed'] for item in day_data) / len(day_data), 1)
         }
     
+    def get_enhanced_weather_for_display(self) -> Dict[str, Any]:
+        """Get enhanced weather data for display: current temp, today min/max, tomorrow forecast"""
+        try:
+            current = self.get_current_weather()
+            forecast = self.get_forecast(days=2)  # Get today and tomorrow
+            
+            result = {
+                'location': current['location'],
+                'current_temperature': current['temperature'],
+                'current_description': current['description'],
+                'timestamp': current['timestamp']
+            }
+            
+            if forecast['forecasts'] and len(forecast['forecasts']) >= 1:
+                today_forecast = forecast['forecasts'][0]
+                result.update({
+                    'today_min': today_forecast['temp_min'],
+                    'today_max': today_forecast['temp_max'],
+                    'today_description': today_forecast['description']
+                })
+                
+                # Add tomorrow's forecast if available
+                if len(forecast['forecasts']) >= 2:
+                    tomorrow_forecast = forecast['forecasts'][1]
+                    result.update({
+                        'tomorrow_min': tomorrow_forecast['temp_min'],
+                        'tomorrow_max': tomorrow_forecast['temp_max'], 
+                        'tomorrow_description': tomorrow_forecast['description']
+                    })
+                else:
+                    # No tomorrow data available
+                    result.update({
+                        'tomorrow_min': None,
+                        'tomorrow_max': None,
+                        'tomorrow_description': 'No forecast available'
+                    })
+            else:
+                # No forecast data available, use current weather as fallback
+                result.update({
+                    'today_min': current['temperature'],
+                    'today_max': current['temperature'],
+                    'today_description': current['description'],
+                    'tomorrow_min': None,
+                    'tomorrow_max': None,
+                    'tomorrow_description': 'No forecast available'
+                })
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error fetching enhanced weather data: {e}")
+            return {
+                'location': 'Unknown',
+                'current_temperature': 0,
+                'current_description': 'Weather data unavailable',
+                'today_min': 0,
+                'today_max': 0,
+                'today_description': 'Data unavailable',
+                'tomorrow_min': None,
+                'tomorrow_max': None,
+                'tomorrow_description': 'Data unavailable',
+                'error': str(e)
+            }
+
     def get_weather_summary_for_ai(self) -> str:
         """Get weather summary for AI image generation"""
         try:
