@@ -448,6 +448,7 @@ Calendar events:
 
 ONLY RETURN YOUR PROMPT SUGGESTION, WITHOUT ANYTHING ELSE (DISMISS SOMETHING LIKE `Here's your prompt`).
 **Never** mention the e-ink display, because it will result in an e-ink display being rendered. Also make sure, that an artistic painting is generated instead of anything that looks like an info screen.
+Just in case you want to make separate images, make columns instead of rows - so split it vertically.
 
 Make it vintage-poster style. Let it only generate an image without any title, date or something like that on the image."""
         
