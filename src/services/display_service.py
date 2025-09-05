@@ -19,21 +19,39 @@ sys.path.append(waveshare_lib_path)
 # Check if we should force mock mode (useful for development)
 FORCE_MOCK_DISPLAY = os.getenv('FORCE_MOCK_DISPLAY', 'false').lower() == 'true'
 
-if FORCE_MOCK_DISPLAY:
-    print("FORCE_MOCK_DISPLAY is enabled - display functions will be mocked")
-    epd7in3e = None
-else:
-    try:
-        from waveshare_epd import epd7in3e
-        print("Successfully imported epd7in3e module")
-    except ImportError as e:
-        print(f"Warning: Waveshare e-paper library not available: {e}")
-        print("Display functions will be mocked.")
+# Global variables for lazy loading
+epd7in3e = None
+_epd7in3e_loaded = False
+_epd7in3e_error = None
+
+def _load_epd7in3e():
+    """Lazy load the epd7in3e module to avoid GPIO conflicts at import time"""
+    global epd7in3e, _epd7in3e_loaded, _epd7in3e_error
+    
+    if _epd7in3e_loaded:
+        return epd7in3e
+    
+    if FORCE_MOCK_DISPLAY:
+        print("FORCE_MOCK_DISPLAY is enabled - display functions will be mocked")
         epd7in3e = None
-    except Exception as e:
-        print(f"Warning: Error importing display module: {e}")
-        print("Display functions will be mocked.")
-        epd7in3e = None
+    else:
+        try:
+            from waveshare_epd import epd7in3e as _epd7in3e
+            epd7in3e = _epd7in3e
+            print("Successfully imported epd7in3e module")
+        except ImportError as e:
+            print(f"Warning: Waveshare e-paper library not available: {e}")
+            print("Display functions will be mocked.")
+            epd7in3e = None
+            _epd7in3e_error = e
+        except Exception as e:
+            print(f"Warning: Error importing display module: {e}")
+            print("Display functions will be mocked.")
+            epd7in3e = None
+            _epd7in3e_error = e
+    
+    _epd7in3e_loaded = True
+    return epd7in3e
 
 class DisplayService:
     def __init__(self):
@@ -47,19 +65,39 @@ class DisplayService:
         self.BW_WIDTH = 800  # These will be sent to ESP32 via I2C
         self.BW_HEIGHT = 480
         
-        # Initialize color display
+        # Initialize color display (lazy loaded)
         self.color_epd = None
         self.display_initialized = False
-        if epd7in3e:
+        # Don't load the display module during init - wait until actually needed
+        print("Display service initialized (hardware will be loaded on first use)")
+    
+    def _ensure_display_loaded(self):
+        """Ensure the display hardware is loaded and initialized"""
+        if self.color_epd is not None:
+            return  # Already loaded
+        
+        # Lazy load the waveshare module
+        epd_module = _load_epd7in3e()
+        
+        if epd_module:
             try:
-                self.color_epd = epd7in3e.EPD()
-                print("Color display initialized successfully")
+                print("Lazy loading display hardware...")
+                self.color_epd = epd_module.EPD()
+                print("✓ Color display hardware loaded successfully")
             except Exception as e:
-                print(f"Warning: Could not initialize color display: {e}")
-                print("This is normal during Flask debug mode restarts")
+                print(f"✗ Warning: Could not initialize color display: {e}")
+                print("This may be due to GPIO conflicts or hardware issues")
+                self.color_epd = None
+        else:
+            print("✗ Waveshare module not available, display functions will be mocked")
+            self.color_epd = None
 
     def get_status(self) -> Dict[str, str]:
         """Get display status"""
+        # Try to lazy load display if not already loaded
+        if not self.color_epd:
+            self._ensure_display_loaded()
+        
         color_status = "active" if self.color_epd else "unavailable"
         bw_status = "active"  # Assume ESP32 connection is always available
         
@@ -122,15 +160,23 @@ class DisplayService:
             image = self.generate_daily_image()
             print(f"✓ Image generated: {image.size[0]}x{image.size[1]} pixels, mode: {image.mode}")
             
+            # Ensure display is loaded before using it
+            if not self.color_epd:
+                self._ensure_display_loaded()
+            
             if self.color_epd:
                 print("Hardware display detected, initializing...")
+                
+                # Get the epd module for cleanup operations
+                epd_module = _load_epd7in3e()
                 
                 try:
                     # Initialize display with proper error handling
                     if not self.display_initialized:
                         print("First time initialization, cleaning up any previous state...")
                         try:
-                            epd7in3e.epdconfig.module_exit(cleanup=True)
+                            if epd_module:
+                                epd_module.epdconfig.module_exit(cleanup=True)
                         except:
                             pass
                         
@@ -166,23 +212,27 @@ class DisplayService:
                     print("Attempting display recovery...")
                     try:
                         # Clean up completely
-                        epd7in3e.epdconfig.module_exit(cleanup=True)
+                        if epd_module:
+                            epd_module.epdconfig.module_exit(cleanup=True)
                         
                         # Reinitialize the display object
-                        self.color_epd = epd7in3e.EPD()
+                        self.color_epd = epd_module.EPD() if epd_module else None
                         self.display_initialized = False
                         
-                        # Try initialization again
-                        self.color_epd.init()
-                        self.display_initialized = True
-                        print("✓ Display recovery successful")
-                        
-                        # Now try the display operation again
-                        self.color_epd.Clear()
-                        buffer = self.color_epd.getbuffer(image)
-                        self.color_epd.display(buffer)
-                        self.color_epd.sleep()
-                        print("✓ Color display updated successfully after recovery")
+                        if self.color_epd:
+                            # Try initialization again
+                            self.color_epd.init()
+                            self.display_initialized = True
+                            print("✓ Display recovery successful")
+                            
+                            # Now try the display operation again
+                            self.color_epd.Clear()
+                            buffer = self.color_epd.getbuffer(image)
+                            self.color_epd.display(buffer)
+                            self.color_epd.sleep()
+                            print("✓ Color display updated successfully after recovery")
+                        else:
+                            raise Exception("Could not reinitialize display")
                         
                     except Exception as recovery_error:
                         print(f"✗ Display recovery failed: {recovery_error}")
@@ -628,8 +678,9 @@ Make it vintage-poster style. Let it only generate an image without any title, d
     def cleanup(self):
         """Clean up GPIO resources"""
         try:
-            if epd7in3e:
-                epd7in3e.epdconfig.module_exit(cleanup=True)
+            epd_module = _load_epd7in3e()
+            if epd_module:
+                epd_module.epdconfig.module_exit(cleanup=True)
                 self.display_initialized = False
                 print("Display GPIO cleanup completed")
         except Exception as e:

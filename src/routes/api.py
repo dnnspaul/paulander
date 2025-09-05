@@ -174,6 +174,10 @@ def test_display_hardware():
         dithered_image = display_service._apply_floyd_steinberg_dithering(test_image)
         
         # Try to display it
+        # Ensure display is loaded
+        if not display_service.color_epd:
+            display_service._ensure_display_loaded()
+            
         if display_service.color_epd:
             # Reset display initialization state
             display_service.display_initialized = False
