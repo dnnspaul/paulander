@@ -22,6 +22,7 @@ dependencies = [
 rpi = [
     "RPi.GPIO",
     "spidev",
+    "gpiozero",
 ]
 
 [build-system]

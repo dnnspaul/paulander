@@ -28,14 +28,16 @@ try:
     # Check if required system libraries are available
     import RPi.GPIO as GPIO
     import spidev
-    print("RPi.GPIO and spidev available")
+    import gpiozero
+    print("RPi.GPIO, spidev, and gpiozero available")
     
     from waveshare_epd import epd7in3e
     print("Successfully imported epd7in3e module")
 except ImportError as e:
     print(f"Warning: Waveshare e-paper library not available: {e}")
     print("Display functions will be mocked.")
-    print("Make sure RPi.GPIO and spidev are installed: pip install RPi.GPIO spidev")
+    print("Make sure all dependencies are installed: uv sync --extra rpi")
+    print("Or manually: pip install RPi.GPIO spidev gpiozero")
     epd7in3e = None
 
 class DisplayService:
