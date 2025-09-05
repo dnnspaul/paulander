@@ -367,9 +367,10 @@ class DisplayService:
             for i, event in enumerate(events[:6]):  # Limit to 6 events
                 # Safely handle start time
                 start_time = 0
-                if event.get('start') and hasattr(event['start'], 'timestamp'):
+                event_start = event.get('start')
+                if event_start is not None and hasattr(event_start, 'timestamp'):
                     try:
-                        start_time = int(event['start'].timestamp())
+                        start_time = int(event_start.timestamp())
                     except (AttributeError, TypeError):
                         start_time = 0
                 

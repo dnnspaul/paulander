@@ -31,7 +31,6 @@ PWR -> GPIO0
 ## I2C
 The ESP32 is connected via I2C to the Raspberry Pi.
 
-### ESP32
 (ESP32) GND <-> GND (Raspberry Pi)
-(ESP32) GPIO21 <-> GPIO27 (Raspberry Pi)
-(ESP32) GPIO22 <-> GPIO22 (Raspberry Pi)
+(ESP32) GPIO21 <-> GPIO2 (Raspberry Pi)
+(ESP32) GPIO22 <-> GPIO3 (Raspberry Pi)
