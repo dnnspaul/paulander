@@ -110,8 +110,8 @@ void loop() {
   if (receivingMultipart && (millis() - lastReceiveTime > 15000)) {  // Increased to 15 seconds
     Serial.printf("I2C receive timeout - received %d bytes (expected JSON data)\n", totalDataReceived);
     
-    // If we received reasonable JSON data, try to process it
-    if (totalDataReceived >= 100) {  // Accept JSON of at least 100 bytes
+    // Check if we have complete JSON even though we timed out
+    if (isJsonComplete()) {
       Serial.println("Data size close to expected - processing anyway");
       i2cDataLength = totalDataReceived;
       i2cDataReady = true;
@@ -228,9 +228,8 @@ void onI2CReceive(int length) {
       Serial.println();
     }
     
-    // Check if we have received enough data
-    // For JSON, we need at least 50 bytes, but wait for more complete data
-    if (totalDataReceived >= 200) {  // Wait for reasonable JSON size
+    // Check if we have received complete JSON data
+    if (isJsonComplete()) {
       Serial.printf("Complete data received: %d bytes (expected: %d)\n", totalDataReceived, sizeof(DisplayData));
       i2cDataLength = totalDataReceived;
       i2cDataReady = true;
@@ -248,6 +247,31 @@ void onI2CReceive(int length) {
   }
 }
 
+bool isJsonComplete() {
+  // Check if we have received complete JSON data
+  if (totalDataReceived < 20) return false;  // Minimum for basic JSON structure
+  
+  bool foundStart = false;
+  int braceCount = 0;
+  
+  for (int i = 0; i < totalDataReceived; i++) {
+    if (i2cBuffer[i] == 0x00) continue;  // Skip register bytes
+    
+    if (i2cBuffer[i] == '{') {
+      if (!foundStart) foundStart = true;
+      braceCount++;
+    } else if (i2cBuffer[i] == '}' && foundStart) {
+      braceCount--;
+      if (braceCount == 0) {
+        Serial.printf("JSON completion detected at position %d (braces balanced)\n", i);
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
 void onI2CRequest() {
   // Send status back to Raspberry Pi
   uint8_t status = dataReceived ? 1 : 0;
@@ -259,26 +283,36 @@ void processI2CData() {
   Serial.printf("Processing I2C data: %d bytes\n", i2cDataLength);
   
   if (i2cDataLength >= 50) {  // JSON should be at least 50 bytes
-    // Check if data starts with register byte 0xFF and skip it
-    uint8_t* dataStart = i2cBuffer;
-    int actualDataLength = i2cDataLength;
+    // Reconstruct JSON by removing register bytes (0x00) from chunks
+    // Each 16-byte chunk starts with 0x00, so we need to clean this up
+    uint8_t cleanBuffer[2048];
+    int cleanLength = 0;
     
-    if (i2cBuffer[0] == 0x00) {
-      Serial.println("Detected register byte 0x00, skipping to actual JSON data");
-      dataStart = &i2cBuffer[1];  // Skip register byte
-      actualDataLength -= 1;
+    Serial.println("Reconstructing JSON from I2C chunks...");
+    for (int i = 0; i < i2cDataLength; ) {
+      if (i2cBuffer[i] == 0x00) {
+        // Skip register byte
+        i++;
+        Serial.printf("Skipped register byte at position %d\n", i-1);
+      } else {
+        // Copy data byte
+        cleanBuffer[cleanLength++] = i2cBuffer[i];
+        i++;
+      }
     }
     
     // Null-terminate the JSON string
-    dataStart[actualDataLength] = '\0';
+    cleanBuffer[cleanLength] = '\0';
+    
+    Serial.printf("Reconstructed JSON: %d bytes (from %d raw bytes)\n", cleanLength, i2cDataLength);
     
     Serial.println("=== JSON Data Debug ===");
-    Serial.printf("JSON length: %d bytes\n", actualDataLength);
-    Serial.printf("JSON data: %s\n", (char*)dataStart);
+    Serial.printf("Clean JSON length: %d bytes\n", cleanLength);
+    Serial.printf("Clean JSON data: %s\n", (char*)cleanBuffer);
     
-    // Parse JSON
+    // Parse JSON from clean buffer
     DynamicJsonDocument doc(2048);  // 2KB for JSON parsing
-    DeserializationError error = deserializeJson(doc, (char*)dataStart);
+    DeserializationError error = deserializeJson(doc, (char*)cleanBuffer);
     
     if (error) {
       Serial.printf("✗ JSON parsing failed: %s\n", error.c_str());
