@@ -107,7 +107,7 @@ void loop() {
     Serial.printf("I2C receive timeout - received %d bytes (expected: %d)\n", totalDataReceived, sizeof(DisplayData));
     
     // If we received close to expected amount, try to process it
-    if (totalDataReceived >= 735) {  // Within 5 bytes of expected 740
+    if (totalDataReceived >= 690) {  // More flexible - accept 698 bytes
       Serial.println("Data size close to expected - processing anyway");
       i2cDataLength = totalDataReceived;
       i2cDataReady = true;
@@ -233,7 +233,7 @@ void onI2CRequest() {
 void processI2CData() {
   Serial.printf("Processing I2C data: %d bytes (DisplayData size: %d)\n", i2cDataLength, sizeof(DisplayData));
   
-  if (i2cDataLength >= 735) {  // Accept data close to 740 bytes
+  if (i2cDataLength >= 690) {  // Accept data close to 698-740 bytes
     // Copy received data
     memcpy(&currentData, i2cBuffer, sizeof(DisplayData));
     

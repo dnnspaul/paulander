@@ -415,31 +415,37 @@ class DisplayService:
             # Send data via I2C using simple write method (better for large data)
             print(f"Sending {len(data)} bytes to ESP32 at address 0x{ESP32_I2C_ADDRESS:02X}")
             
-            # Send data in chunks (I2C has 32-byte block limit)
-            chunk_size = 32
+            # Send data in chunks (I2C has strict limits)
+            # Use 31 bytes per chunk to account for register byte in smbus2
+            chunk_size = 31
             total_chunks = (len(data) + chunk_size - 1) // chunk_size
-            print(f"Sending {total_chunks} chunks of {chunk_size} bytes each...")
+            print(f"Sending {total_chunks} chunks of max {chunk_size} bytes each...")
             
             chunks_sent = 0
+            total_bytes_sent = 0
+            
             for i in range(0, len(data), chunk_size):
                 chunk = data[i:i+chunk_size]
                 chunk_num = i // chunk_size + 1
+                actual_chunk_size = len(chunk)
                 
                 try:
-                    # Use register address to help ESP32 track chunks
-                    self.i2c_bus.write_i2c_block_data(ESP32_I2C_ADDRESS, chunk_num, list(chunk))
+                    # Simple write without register address to avoid size limits
+                    chunk_list = list(chunk)
+                    self.i2c_bus.write_i2c_block_data(ESP32_I2C_ADDRESS, 0, chunk_list)
                     chunks_sent += 1
+                    total_bytes_sent += actual_chunk_size
                     
                     if chunks_sent % 5 == 0:  # Progress every 5 chunks
-                        print(f"Progress: {chunks_sent}/{total_chunks} chunks sent ({chunks_sent * chunk_size} bytes)")
+                        print(f"Progress: {chunks_sent}/{total_chunks} chunks sent ({total_bytes_sent} bytes)")
                     
                     time.sleep(0.05)  # 50ms delay between chunks for reliability
                     
                 except Exception as chunk_error:
-                    print(f"✗ Chunk {chunk_num} failed: {chunk_error}")
+                    print(f"✗ Chunk {chunk_num} ({actual_chunk_size} bytes) failed: {chunk_error}")
                     break
             
-            print(f"✓ Transmission completed: {chunks_sent}/{total_chunks} chunks sent ({chunks_sent * chunk_size} bytes)")
+            print(f"✓ Transmission completed: {chunks_sent}/{total_chunks} chunks sent ({total_bytes_sent} total bytes)")
             
             # Read ESP32 status
             try:
