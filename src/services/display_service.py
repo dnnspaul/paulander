@@ -412,15 +412,34 @@ class DisplayService:
             # Prepare data structure matching ESP32 expectations
             data = self._prepare_esp32_data()
             
-            # Send data via I2C
+            # Send data via I2C using simple write method (better for large data)
             print(f"Sending {len(data)} bytes to ESP32 at address 0x{ESP32_I2C_ADDRESS:02X}")
             
-            # Send data in chunks if needed (I2C has buffer limitations)
-            chunk_size = 32  # Common I2C buffer size
+            # Send data in chunks (I2C has 32-byte block limit)
+            chunk_size = 32
+            total_chunks = (len(data) + chunk_size - 1) // chunk_size
+            print(f"Sending {total_chunks} chunks of {chunk_size} bytes each...")
+            
+            chunks_sent = 0
             for i in range(0, len(data), chunk_size):
                 chunk = data[i:i+chunk_size]
-                self.i2c_bus.write_i2c_block_data(ESP32_I2C_ADDRESS, i, chunk)
-                time.sleep(0.01)  # Small delay between chunks
+                chunk_num = i // chunk_size + 1
+                
+                try:
+                    # Use register address to help ESP32 track chunks
+                    self.i2c_bus.write_i2c_block_data(ESP32_I2C_ADDRESS, chunk_num, list(chunk))
+                    chunks_sent += 1
+                    
+                    if chunks_sent % 5 == 0:  # Progress every 5 chunks
+                        print(f"Progress: {chunks_sent}/{total_chunks} chunks sent ({chunks_sent * chunk_size} bytes)")
+                    
+                    time.sleep(0.05)  # 50ms delay between chunks for reliability
+                    
+                except Exception as chunk_error:
+                    print(f"✗ Chunk {chunk_num} failed: {chunk_error}")
+                    break
+            
+            print(f"✓ Transmission completed: {chunks_sent}/{total_chunks} chunks sent ({chunks_sent * chunk_size} bytes)")
             
             # Read ESP32 status
             try:
