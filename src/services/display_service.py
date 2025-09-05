@@ -459,22 +459,38 @@ class DisplayService:
                 chunk_num = i // chunk_size + 1
                 actual_chunk_size = len(chunk)
                 
-                try:
-                    # Use raw I2C write to send data exactly as-is
-                    chunk_list = list(chunk)
-                    # This sends the data without any register prefix
-                    self.i2c_bus.write_i2c_block_data(ESP32_I2C_ADDRESS, 0xFF, chunk_list)
-                    chunks_sent += 1
-                    total_bytes_sent += actual_chunk_size
-                    
-                    if chunks_sent % 5 == 0:  # Progress every 5 chunks
-                        print(f"Progress: {chunks_sent}/{total_chunks} chunks sent ({total_bytes_sent} bytes)")
-                    
-                    time.sleep(0.01)  # 10ms delay between chunks for faster transmission
-                    
-                except Exception as chunk_error:
-                    print(f"✗ Chunk {chunk_num} ({actual_chunk_size} bytes) failed: {chunk_error}")
+                # Retry mechanism for each chunk
+                max_chunk_retries = 3
+                chunk_sent = False
+                
+                for retry in range(max_chunk_retries):
+                    try:
+                        # Use raw I2C write to send data exactly as-is
+                        chunk_list = list(chunk)
+                        # This sends the data without any register prefix
+                        self.i2c_bus.write_i2c_block_data(ESP32_I2C_ADDRESS, 0xFF, chunk_list)
+                        chunk_sent = True
+                        chunks_sent += 1
+                        total_bytes_sent += actual_chunk_size
+                        
+                        if chunks_sent % 5 == 0:  # Progress every 5 chunks
+                            print(f"Progress: {chunks_sent}/{total_chunks} chunks sent ({total_bytes_sent} bytes)")
+                        
+                        break  # Success, exit retry loop
+                        
+                    except Exception as chunk_error:
+                        if retry < max_chunk_retries - 1:
+                            print(f"Chunk {chunk_num} failed (attempt {retry + 1}), retrying...")
+                            time.sleep(0.05)  # Wait before retry
+                        else:
+                            print(f"✗ Chunk {chunk_num} ({actual_chunk_size} bytes) failed after {max_chunk_retries} attempts: {chunk_error}")
+                
+                if not chunk_sent:
+                    print("✗ Stopping transmission due to chunk failure")
                     break
+                
+                # Longer delay between chunks for ESP32 processing
+                time.sleep(0.02)  # 20ms delay between chunks
             
             print(f"✓ Transmission completed: {chunks_sent}/{total_chunks} chunks sent ({total_bytes_sent} total bytes)")
             

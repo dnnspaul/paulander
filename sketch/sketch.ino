@@ -103,7 +103,7 @@ void loop() {
   
   // Check for I2C receive timeout
   static unsigned long lastReceiveTime = millis();
-  if (receivingMultipart && (millis() - lastReceiveTime > 5000)) {  // Increased to 5 seconds
+  if (receivingMultipart && (millis() - lastReceiveTime > 10000)) {  // Increased to 10 seconds
     Serial.printf("I2C receive timeout - received %d bytes (expected: %d)\n", totalDataReceived, sizeof(DisplayData));
     
     // If we received close to expected amount, try to process it
