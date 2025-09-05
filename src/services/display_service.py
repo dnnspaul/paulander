@@ -486,16 +486,25 @@ Make it vintage-poster style. Let it only generate an image without any title, d
         return final_image
     
     def _apply_floyd_steinberg_dithering(self, image: Image.Image) -> Image.Image:
-        """Apply Floyd-Steinberg dithering for e-ink display with 6 colors"""
+        """Apply highly optimized vectorized Floyd-Steinberg dithering for e-ink display"""
+        import time
+        start_time = time.time()
+        
         # Define the 6 colors supported by the e-ink display (RGB values)
-        eink_colors = [
-            (0, 0, 0),       # Black
-            (255, 255, 255), # White
-            (255, 0, 0),     # Red
-            (0, 255, 0),     # Green
-            (0, 0, 255),     # Blue
-            (255, 255, 0),   # Yellow
-        ]
+        eink_colors = np.array([
+            [0, 0, 0],       # Black
+            [255, 255, 255], # White
+            [255, 0, 0],     # Red
+            [0, 255, 0],     # Green
+            [0, 0, 255],     # Blue
+            [255, 255, 0],   # Yellow
+        ], dtype=np.float32)
+        
+        # Pre-compute Floyd-Steinberg weights as constants
+        WEIGHT_RIGHT = 7.0 / 16.0      # 0.4375
+        WEIGHT_BOTTOM_LEFT = 3.0 / 16.0 # 0.1875  
+        WEIGHT_BOTTOM = 5.0 / 16.0      # 0.3125
+        WEIGHT_BOTTOM_RIGHT = 1.0 / 16.0 # 0.0625
         
         # Convert image to RGB if not already
         if image.mode != 'RGB':
@@ -505,45 +514,56 @@ Make it vintage-poster style. Let it only generate an image without any title, d
         img_array = np.array(image, dtype=np.float32)
         height, width = img_array.shape[:2]
         
-        # Apply Floyd-Steinberg dithering
+        print(f"Starting vectorized Floyd-Steinberg dithering on {width}x{height} image...")
+        
+        # Highly optimized Floyd-Steinberg dithering
+        # Process row by row to maintain error propagation order
         for y in range(height):
+            # Process entire row pixels for closest color finding (vectorized)
+            row_pixels = img_array[y].reshape(-1, 3)  # Shape: (width, 3)
+            
+            # Vectorized distance calculation for entire row
+            # Broadcasting: (width, 1, 3) - (1, 6, 3) -> (width, 6, 3) -> (width, 6)
+            pixel_distances = np.sum((row_pixels[:, np.newaxis, :] - eink_colors[np.newaxis, :, :]) ** 2, axis=2)
+            closest_indices = np.argmin(pixel_distances, axis=1)
+            new_row_pixels = eink_colors[closest_indices]
+            
+            # Calculate quantization errors for entire row
+            row_errors = row_pixels - new_row_pixels
+            
+            # Process each pixel in the row for error distribution
             for x in range(width):
-                old_pixel = img_array[y, x].copy()
+                # Update current pixel
+                img_array[y, x] = new_row_pixels[x]
                 
-                # Find the closest color from the e-ink palette
-                new_pixel = self._find_closest_color(old_pixel, eink_colors)
-                img_array[y, x] = new_pixel
+                # Get quantization error for current pixel
+                quant_error = row_errors[x]
                 
-                # Calculate quantization error
-                quant_error = old_pixel - new_pixel
-                
-                # Distribute error to neighboring pixels using Floyd-Steinberg weights
+                # Optimized error distribution with pre-computed weights
+                # Right pixel (x+1, y)
                 if x + 1 < width:
-                    img_array[y, x + 1] += quant_error * 7/16
+                    img_array[y, x + 1] += quant_error * WEIGHT_RIGHT
+                
+                # Bottom row pixels (only if next row exists)
                 if y + 1 < height:
-                    if x - 1 >= 0:
-                        img_array[y + 1, x - 1] += quant_error * 3/16
-                    img_array[y + 1, x] += quant_error * 5/16
+                    # Bottom-left (x-1, y+1)
+                    if x > 0:
+                        img_array[y + 1, x - 1] += quant_error * WEIGHT_BOTTOM_LEFT
+                    
+                    # Bottom (x, y+1)
+                    img_array[y + 1, x] += quant_error * WEIGHT_BOTTOM
+                    
+                    # Bottom-right (x+1, y+1)
                     if x + 1 < width:
-                        img_array[y + 1, x + 1] += quant_error * 1/16
+                        img_array[y + 1, x + 1] += quant_error * WEIGHT_BOTTOM_RIGHT
         
         # Clamp values to valid range and convert back to PIL Image
         img_array = np.clip(img_array, 0, 255).astype(np.uint8)
+        
+        end_time = time.time()
+        print(f"✓ Vectorized dithering completed in {end_time - start_time:.2f} seconds")
+        
         return Image.fromarray(img_array, 'RGB')
-    
-    def _find_closest_color(self, pixel: np.ndarray, color_palette: List[tuple]) -> np.ndarray:
-        """Find the closest color in the palette using Euclidean distance"""
-        min_distance = float('inf')
-        closest_color = color_palette[0]
-        
-        for color in color_palette:
-            # Calculate Euclidean distance in RGB space
-            distance = np.sqrt(np.sum((pixel - np.array(color)) ** 2))
-            if distance < min_distance:
-                min_distance = distance
-                closest_color = color
-        
-        return np.array(closest_color, dtype=np.float32)
     
     def _create_fallback_color_image(self, weather_summary: str, events: List[Dict]) -> Image.Image:
         """Create a fallback image when AI generation is not available"""
