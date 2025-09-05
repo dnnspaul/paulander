@@ -77,90 +77,58 @@ class CalendarService:
     def get_upcoming_events(self, days_ahead: int = 7) -> List[Dict[str, Any]]:
         """Get upcoming events for the next N days"""
         try:
-            print(f"DEBUG: Getting calendar...")
             calendar = self._get_calendar()
-            print(f"DEBUG: Calendar obtained successfully")
             
             # Define time range
             now = datetime.now(pytz.UTC)
             end_date = now + timedelta(days=days_ahead)
-            print(f"DEBUG: Time range: {now} to {end_date}")
             
             # Search for events
-            print(f"DEBUG: Searching for events...")
             events = calendar.search(
                 start=now,
                 end=end_date,
                 event=True,
                 expand=True
             )
-            print(f"DEBUG: Found {len(events) if events else 0} raw events")
             
             event_list = []
             
-            for i, event in enumerate(events):
+            for event in events:
                 try:
-                    print(f"DEBUG: Processing event {i+1}")
-                    
                     # Check if event has vobject_instance
-                    if not hasattr(event, 'vobject_instance'):
-                        print(f"DEBUG: Event {i+1} has no vobject_instance, skipping")
-                        continue
-                    
-                    if event.vobject_instance is None:
-                        print(f"DEBUG: Event {i+1} vobject_instance is None, skipping")
+                    if not hasattr(event, 'vobject_instance') or event.vobject_instance is None:
                         continue
                     
                     # Check if vobject_instance has vevent
                     if not hasattr(event.vobject_instance, 'vevent'):
-                        print(f"DEBUG: Event {i+1} vobject_instance has no vevent, skipping")
                         continue
                     
                     # Parse the event
                     vevent = event.vobject_instance.vevent
-                    print(f"DEBUG: Event {i+1} vevent obtained")
                     
-                    # Extract basic information with detailed debugging
-                    print(f"DEBUG: Extracting event {i+1} data...")
-                    
-                    # Check each field individually
+                    # Extract basic information
                     event_id = str(event.id) if hasattr(event, 'id') else 'unknown'
-                    print(f"DEBUG: Event {i+1} id: {event_id}")
-                    
                     title = str(vevent.summary.value) if hasattr(vevent, 'summary') and hasattr(vevent.summary, 'value') else 'No Title'
-                    print(f"DEBUG: Event {i+1} title: {title}")
                     
-                    # Handle start time with extra debugging
+                    # Handle start time
                     start_time = None
-                    if hasattr(vevent, 'dtstart'):
-                        if hasattr(vevent.dtstart, 'value'):
-                            print(f"DEBUG: Event {i+1} dtstart.value type: {type(vevent.dtstart.value)}")
-                            start_time = self._parse_datetime(vevent.dtstart.value)
-                            print(f"DEBUG: Event {i+1} parsed start: {start_time}")
-                        else:
-                            print(f"DEBUG: Event {i+1} dtstart has no value attribute")
-                    else:
-                        print(f"DEBUG: Event {i+1} has no dtstart")
+                    if hasattr(vevent, 'dtstart') and hasattr(vevent.dtstart, 'value'):
+                        start_time = self._parse_datetime(vevent.dtstart.value)
                     
                     # Handle end time
                     end_time = None
-                    if hasattr(vevent, 'dtend'):
-                        if hasattr(vevent.dtend, 'value'):
-                            end_time = self._parse_datetime(vevent.dtend.value)
-                            print(f"DEBUG: Event {i+1} parsed end: {end_time}")
+                    if hasattr(vevent, 'dtend') and hasattr(vevent.dtend, 'value'):
+                        end_time = self._parse_datetime(vevent.dtend.value)
                     
                     # Handle location
                     location = None
-                    if hasattr(vevent, 'location'):
-                        if hasattr(vevent.location, 'value'):
-                            location = str(vevent.location.value)
-                            print(f"DEBUG: Event {i+1} location: {location}")
+                    if hasattr(vevent, 'location') and hasattr(vevent.location, 'value'):
+                        location = str(vevent.location.value)
                     
                     # Handle description
                     description = None
-                    if hasattr(vevent, 'description'):
-                        if hasattr(vevent.description, 'value'):
-                            description = str(vevent.description.value)
+                    if hasattr(vevent, 'description') and hasattr(vevent.description, 'value'):
+                        description = str(vevent.description.value)
                     
                     event_data = {
                         'id': event_id,
@@ -172,32 +140,20 @@ class CalendarService:
                         'all_day': self._is_all_day_event(vevent)
                     }
                     
-                    print(f"DEBUG: Event {i+1} data created successfully")
-                    
                     # Only add events that have a start time and are in the future
                     if event_data['start'] and event_data['start'] > now:
                         event_list.append(event_data)
-                        print(f"DEBUG: Event {i+1} added to list")
-                    else:
-                        print(f"DEBUG: Event {i+1} skipped (no start time or not in future)")
                         
                 except Exception as e:
-                    print(f"DEBUG: Error parsing event {i+1}: {e}")
-                    import traceback
-                    print(f"DEBUG: Traceback: {traceback.format_exc()}")
                     continue
             
-            print(f"DEBUG: Sorting {len(event_list)} events by start time")
             # Sort by start time
             event_list.sort(key=lambda x: x['start'])
             
-            print(f"DEBUG: Returning {len(event_list)} events")
             return event_list
             
         except Exception as e:
-            print(f"DEBUG: Error in get_upcoming_events: {e}")
-            import traceback
-            print(f"DEBUG: Traceback: {traceback.format_exc()}")
+            print(f"Error fetching calendar events: {e}")
             return []
     
     def _parse_datetime(self, dt):

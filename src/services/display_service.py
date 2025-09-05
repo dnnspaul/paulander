@@ -352,7 +352,6 @@ class DisplayService:
             # Fetch weather data
             print("Fetching weather data...")
             weather = self.weather_service.get_current_weather()
-            print(f"DEBUG: Weather service returned: {type(weather)} - {weather}")
             
             self.cached_weather_data = {
                 'temperature': weather.get('temperature', 0.0),
@@ -365,33 +364,24 @@ class DisplayService:
             # Fetch calendar data
             print("Fetching calendar events...")
             events = self.calendar_service.get_upcoming_events(days_ahead=3)
-            print(f"DEBUG: Calendar service returned: {type(events)} - length: {len(events) if events else 'None'}")
             
             self.cached_calendar_data = []
             
             if events:
-                print(f"DEBUG: Processing {len(events)} events...")
                 for i, event in enumerate(events[:6]):  # Limit to 6 events
-                    print(f"DEBUG: Processing event {i+1}: {type(event)} - {event}")
-                    
                     # Safely handle start time
                     start_time = 0
                     event_start = event.get('start') if event else None
-                    print(f"DEBUG: Event {i+1} start field: {type(event_start)} - {event_start}")
                     
                     if event_start is not None and hasattr(event_start, 'timestamp'):
                         try:
                             start_time = int(event_start.timestamp())
-                            print(f"DEBUG: Event {i+1} timestamp: {start_time}")
-                        except (AttributeError, TypeError) as e:
-                            print(f"DEBUG: Event {i+1} timestamp error: {e}")
+                        except (AttributeError, TypeError):
                             start_time = 0
                     
                     # Safely handle other fields
                     title = event.get('title', '') if event else ''
                     location = event.get('location', '') if event else ''
-                    
-                    print(f"DEBUG: Event {i+1} - title: '{title}', location: '{location}', start_time: {start_time}")
                     
                     event_data = {
                         'title': title[:63],  # Limit to 63 chars
@@ -400,18 +390,13 @@ class DisplayService:
                         'valid': bool(title)
                     }
                     self.cached_calendar_data.append(event_data)
-                    print(f"DEBUG: Event {i+1} data created and added")
-            else:
-                print("DEBUG: No events returned from calendar service")
             
             print(f"✓ Calendar cached: {len(self.cached_calendar_data)} events")
-            print("DEBUG: _fetch_and_cache_data completed successfully")
             
         except Exception as e:
             print(f"✗ Error fetching API data: {e}")
-            print(f"DEBUG: Exception type: {type(e)}")
             import traceback
-            print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+            print(f"Full traceback: {traceback.format_exc()}")
             
             # Use fallback data if APIs fail
             if not self.cached_weather_data:
@@ -526,8 +511,6 @@ class DisplayService:
         
         # Prepare events data - only send the events we have
         events_data = []
-        print(f"DEBUG: Preparing {len(self.cached_calendar_data)} calendar events for JSON:")
-        
         for i, event in enumerate(self.cached_calendar_data[:6]):  # Limit to 6 events
             event_data = {
                 "title": event['title'][:63],  # Limit title length
@@ -536,7 +519,6 @@ class DisplayService:
                 "valid": event['valid']
             }
             events_data.append(event_data)
-            print(f"DEBUG: Event {i+1}: '{event_data['title']}' at {event_data['start_time']} location: '{event_data['location']}' valid: {event_data['valid']}")
         
         # Create complete data structure
         json_data = {
