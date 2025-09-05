@@ -435,60 +435,97 @@ class DisplayService:
             self._create_mock_bw_display()
     
     def _prepare_esp32_data(self):
-        """Prepare data structure for ESP32 communication"""
-        # Create binary data structure matching the ESP32 sketch
-        data = bytearray()
+        """Prepare data structure for ESP32 communication with proper alignment"""
+        # The ESP32 expects 740 bytes due to structure padding, let's match that
+        data = bytearray(740)  # Pre-allocate to exact ESP32 size
+        offset = 0
         
-        # Weather data (4 + 64 + 32 + 4 = 104 bytes)
-        temp_bytes = struct.pack('<f', float(self.cached_weather_data['temperature']))
-        data.extend(temp_bytes)
+        print(f"Preparing data for ESP32 (target size: 740 bytes)")
+        print(f"Weather: {self.cached_weather_data['temperature']}°C, {self.cached_weather_data['description']}")
         
-        # Pad strings to fixed lengths
-        desc = self.cached_weather_data['description'].encode('utf-8')[:63]
-        desc = desc.ljust(64, b'\x00')
-        data.extend(desc)
+        # Weather data structure (should be 104 bytes, but may be padded to 108 due to alignment)
+        # float temperature (4 bytes)
+        struct.pack_into('<f', data, offset, float(self.cached_weather_data['temperature']))
+        offset += 4
         
-        location = self.cached_weather_data['location'].encode('utf-8')[:31]
-        location = location.ljust(32, b'\x00')
-        data.extend(location)
+        # char description[64] (64 bytes)
+        desc_bytes = self.cached_weather_data['description'].encode('utf-8')[:63]
+        data[offset:offset+64] = desc_bytes.ljust(64, b'\x00')
+        offset += 64
         
-        timestamp_bytes = struct.pack('<I', self.cached_weather_data['timestamp'])
-        data.extend(timestamp_bytes)
+        # char location[32] (32 bytes)
+        loc_bytes = self.cached_weather_data['location'].encode('utf-8')[:31]  
+        data[offset:offset+32] = loc_bytes.ljust(32, b'\x00')
+        offset += 32
         
-        # Calendar events (6 events * (64 + 32 + 4 + 1) = 606 bytes)
+        # uint32_t timestamp (4 bytes)
+        struct.pack_into('<I', data, offset, self.cached_weather_data['timestamp'])
+        offset += 4
+        
+        # Add padding to align to 4-byte boundary if needed
+        while offset % 4 != 0:
+            offset += 1
+        
+        weather_end = offset
+        print(f"Weather data ends at offset: {weather_end}")
+        
+        # Calendar events - each should be 101 bytes, but may be padded
         for i in range(6):
+            event_start = offset
+            
             if i < len(self.cached_calendar_data):
                 event = self.cached_calendar_data[i]
                 
-                title = event['title'].encode('utf-8')[:63]
-                title = title.ljust(64, b'\x00')
-                data.extend(title)
+                # char title[64] (64 bytes)
+                title_bytes = event['title'].encode('utf-8')[:63]
+                data[offset:offset+64] = title_bytes.ljust(64, b'\x00')
+                offset += 64
                 
-                loc = event['location'].encode('utf-8')[:31]
-                loc = loc.ljust(32, b'\x00')
-                data.extend(loc)
+                # char location[32] (32 bytes)
+                event_loc_bytes = event['location'].encode('utf-8')[:31]
+                data[offset:offset+32] = event_loc_bytes.ljust(32, b'\x00')
+                offset += 32
                 
-                start_time_bytes = struct.pack('<I', event['start_time'])
-                data.extend(start_time_bytes)
+                # uint32_t start_time (4 bytes)
+                struct.pack_into('<I', data, offset, event['start_time'])
+                offset += 4
                 
-                valid_byte = struct.pack('B', 1 if event['valid'] else 0)
-                data.extend(valid_byte)
+                # bool valid (1 byte)
+                struct.pack_into('B', data, offset, 1 if event['valid'] else 0)
+                offset += 1
             else:
-                # Empty event slot
-                data.extend(b'\x00' * 101)  # 64 + 32 + 4 + 1
+                # Empty event slot - fill with zeros
+                data[offset:offset+101] = b'\x00' * 101
+                offset += 101
+            
+            # Add padding to align each event structure to 4-byte boundary
+            while (offset - event_start) % 4 != 0:
+                offset += 1
         
-        # Event count (1 byte)
+        events_end = offset
+        print(f"Events data ends at offset: {events_end}")
+        
+        # uint8_t event_count (1 byte)
         event_count = min(len(self.cached_calendar_data), 6)
-        data.extend(struct.pack('B', event_count))
+        struct.pack_into('B', data, offset, event_count)
+        offset += 1
         
-        # Data hash (4 bytes) - will be calculated by ESP32
-        data.extend(struct.pack('<I', 0))
+        # Add padding before uint32_t fields
+        while offset % 4 != 0:
+            offset += 1
         
-        # Current timestamp (4 bytes)
-        current_timestamp_bytes = struct.pack('<I', int(time.time()))
-        data.extend(current_timestamp_bytes)
+        # uint32_t data_hash (4 bytes) - will be calculated by ESP32
+        struct.pack_into('<I', data, offset, 0)
+        offset += 4
         
-        print(f"Prepared ESP32 data: {len(data)} bytes total")
+        # uint32_t timestamp (4 bytes)
+        struct.pack_into('<I', data, offset, int(time.time()))
+        offset += 4
+        
+        print(f"Final data size: {len(data)} bytes, used: {offset} bytes")
+        print(f"Temperature packed: {struct.unpack('<f', data[0:4])[0]:.1f}°C")
+        print(f"Description: {data[4:68].rstrip(b'\\x00').decode('utf-8', errors='ignore')}")
+        
         return data
     
     def _create_mock_bw_display(self):
