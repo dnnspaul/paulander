@@ -20,6 +20,11 @@ class SchedulerService:
                 self.scheduler.start()
                 self.running = True
                 print("Scheduler started")
+                
+                # Refresh both displays immediately after startup
+                print("Performing initial display refresh...")
+                self._refresh_bw_display()
+                self._refresh_color_display()
             except Exception as e:
                 if "already running" in str(e).lower():
                     print("Scheduler already running")
@@ -65,7 +70,11 @@ class SchedulerService:
         
         print("Scheduled jobs:")
         for job in self.scheduler.get_jobs():
-            next_run = getattr(job, 'next_run_time', 'Unknown')
+            next_run_time = getattr(job, 'next_run_time', None)
+            if next_run_time:
+                next_run = next_run_time.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                next_run = 'Calculating...'
             print(f"  - {job.name}: {next_run}")
     
     def _refresh_bw_display(self):
