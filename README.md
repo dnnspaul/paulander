@@ -6,6 +6,9 @@ E-ink display dashboard for Raspberry Pi with calendar and weather integration.
 
 ### Using uv (recommended)
 ```bash
+# Initialize git submodules (required for Waveshare e-paper library)
+git submodule update --init --recursive
+
 # Install dependencies
 uv sync
 
@@ -19,6 +22,9 @@ uv run python run.py
 
 ### Using pip
 ```bash
+# Initialize git submodules (required for Waveshare e-paper library)
+git submodule update --init --recursive
+
 # Install dependencies
 pip install -r requirements.txt
 
