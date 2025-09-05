@@ -58,7 +58,8 @@ class SchedulerService:
         
         print("Scheduled jobs:")
         for job in self.scheduler.get_jobs():
-            print(f"  - {job.name}: {job.next_run_time}")
+            next_run = getattr(job, 'next_run_time', 'Unknown')
+            print(f"  - {job.name}: {next_run}")
     
     def _refresh_bw_display(self):
         """Refresh B&W display"""
@@ -88,10 +89,11 @@ class SchedulerService:
         """Get status of scheduled jobs"""
         jobs = []
         for job in self.scheduler.get_jobs():
+            next_run_time = getattr(job, 'next_run_time', None)
             jobs.append({
                 'id': job.id,
                 'name': job.name,
-                'next_run': job.next_run_time.isoformat() if job.next_run_time else None,
+                'next_run': next_run_time.isoformat() if next_run_time else None,
                 'trigger': str(job.trigger)
             })
         
