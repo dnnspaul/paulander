@@ -82,7 +82,8 @@ python run.py
 - `POST /api/display/refresh` - Manually refresh displays
 - `GET /api/display/status` - Display status
 - `POST /api/display/test-ai-image` - Test AI image generation with dithering
-- `POST /api/display/test-dithering` - Test Floyd-Steinberg dithering algorithm
+- `POST /api/display/test-dithering` - Test Floyd-Steinberg dithering algorithm  
+- `POST /api/display/debug-gemini` - Debug Gemini API connection and configuration
 
 For detailed hardware setup and configuration, see CLAUDE.md.
 

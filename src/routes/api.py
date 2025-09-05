@@ -119,3 +119,41 @@ def test_dithering():
         return jsonify({'message': 'Dithering test completed. Check test_original_image.png vs test_dithered_image.png'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/display/debug-gemini', methods=['POST'])
+def debug_gemini():
+    """Debug Gemini API configuration and connection"""
+    try:
+        from google import genai as genai_new
+        
+        # Check API key
+        gemini_api_key = config_service.get('gemini_api_key')
+        if not gemini_api_key:
+            return jsonify({'error': 'No Gemini API key configured'}), 400
+        
+        # Test client creation
+        client = genai_new.Client(api_key=gemini_api_key)
+        
+        # Test simple text generation
+        test_response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=["Say hello in exactly 5 words."],
+        )
+        
+        test_result = test_response.text.strip()
+        
+        return jsonify({
+            'message': 'Gemini API connection test successful',
+            'api_key_present': bool(gemini_api_key),
+            'api_key_length': len(gemini_api_key) if gemini_api_key else 0,
+            'test_response': test_result,
+            'models_available': ['gemini-2.5-flash', 'gemini-2.5-flash-image-preview']
+        })
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'error': f'Gemini API test failed: {str(e)}',
+            'traceback': traceback.format_exc(),
+            'api_key_present': bool(config_service.get('gemini_api_key'))
+        }), 500

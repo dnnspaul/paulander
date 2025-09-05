@@ -120,28 +120,52 @@ class DisplayService:
     def update_color_display(self):
         """Update the color e-ink display with AI-generated image"""
         try:
+            print("=== Starting color display update ===")
+            
             # Generate AI image based on today's events and weather
+            print("Generating AI image...")
             image = self.generate_daily_image()
+            print(f"✓ Image generated: {image.size[0]}x{image.size[1]} pixels, mode: {image.mode}")
             
             if self.color_epd:
+                print("Hardware display detected, initializing...")
                 # Initialize display
                 self.color_epd.init()
+                print("✓ Display initialized")
+                
                 self.color_epd.Clear()
+                print("✓ Display cleared")
                 
                 # Display the image
-                self.color_epd.display(self.color_epd.getbuffer(image))
+                print("Converting image to display buffer...")
+                buffer = self.color_epd.getbuffer(image)
+                print(f"✓ Buffer created, size: {len(buffer) if buffer else 'None'} bytes")
+                
+                print("Sending image to display...")
+                self.color_epd.display(buffer)
+                print("✓ Image sent to display")
                 
                 # Put display to sleep to save power
+                print("Putting display to sleep...")
                 self.color_epd.sleep()
-                print("Color display updated successfully")
+                print("✓ Display in sleep mode")
+                
+                print("✓ Color display updated successfully")
             else:
                 # Save image for testing
-                image.save('color_display_output.png')
-                print("Color display mocked - image saved as color_display_output.png")
+                filename = 'color_display_output.png'
+                image.save(filename)
+                print(f"✓ Color display mocked - image saved as {filename}")
+                print(f"  Image details: {image.size[0]}x{image.size[1]} pixels, {image.mode} mode")
             
             self._set_last_refresh_time('color')
+            print("✓ Last refresh time updated")
+            print("=== Color display update completed ===")
             
         except Exception as e:
+            print(f"✗ Color display update failed: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             raise Exception(f"Color display update failed: {str(e)}")
     
     def update_bw_display(self):
@@ -164,68 +188,129 @@ class DisplayService:
     def generate_daily_image(self) -> Image.Image:
         """Generate AI image based on calendar events and weather"""
         try:
+            print("=== Starting daily image generation ===")
+            
             # Get today's data
+            print("Fetching weather data...")
             weather_summary = self.weather_service.get_weather_summary_for_ai()
+            print(f"✓ Weather summary: {weather_summary}")
+            
+            print("Fetching calendar events...")
             events = self.calendar_service.get_today_events()
+            print(f"✓ Found {len(events)} events for today")
             
             # Generate image with Gemini (if available)
             gemini_api_key = self.config_service.get('gemini_api_key')
             
             if gemini_api_key:
+                print("✓ Gemini API key found, attempting AI image generation...")
                 try:
-                    return self._generate_gemini_image(weather_summary, events)
+                    result = self._generate_gemini_image(weather_summary, events)
+                    print("✓ AI image generation completed successfully")
+                    return result
                 except Exception as e:
-                    print(f"AI image generation failed: {e}")
+                    print(f"✗ AI image generation failed: {e}")
+                    print("Falling back to text-based image...")
                     return self._create_fallback_color_image(weather_summary, events)
             else:
+                print("✗ No Gemini API key configured, using fallback image...")
                 return self._create_fallback_color_image(weather_summary, events)
                 
         except Exception as e:
-            print(f"Error generating daily image: {e}")
+            print(f"✗ Error generating daily image: {e}")
+            print("Using emergency fallback image...")
             return self._create_fallback_color_image("Weather unavailable", [])
     
     def _generate_gemini_image(self, weather_summary: str, events: List[Dict]) -> Image.Image:
         """Generate image using Gemini API with two-step process"""
         gemini_api_key = self.config_service.get('gemini_api_key')
+        print(f"Starting Gemini image generation process...")
+        print(f"Weather summary: {weather_summary}")
+        print(f"Events count: {len(events)}")
         
         # Step 1: Generate detailed prompt using Gemini 2.5 Flash
         prompt_generation_text = self._create_prompt_generation_request(weather_summary, events)
+        print(f"Step 1: Generating detailed prompt with Gemini 2.5 Flash...")
         
         try:
             # Configure the new Gemini client
             client = genai_new.Client(api_key=gemini_api_key)
+            print(f"Gemini client configured successfully")
             
             # Generate the detailed prompt
+            print(f"Calling Gemini 2.5 Flash for prompt generation...")
             prompt_response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=[prompt_generation_text],
             )
             
             detailed_prompt = prompt_response.text.strip()
-            print(f"Generated prompt: {detailed_prompt}")
+            print(f"✓ Step 1 completed - Generated prompt: {detailed_prompt}")
             
             # Step 2: Generate image using the detailed prompt
+            print(f"Step 2: Generating image with Gemini 2.5 Flash Image Preview...")
+            print(f"Using prompt: {detailed_prompt[:100]}...")
+            
             image_response = client.models.generate_content(
                 model="gemini-2.5-flash-image-preview",
                 contents=[detailed_prompt]
             )
             
-            # Extract and process the generated image
-            for part in image_response.candidates[0].content.parts:
-                if part.inline_data is not None:
-                    image = Image.open(BytesIO(part.inline_data.data))
-                    # Resize and crop to fit 800x480 display
-                    resized_image = self._resize_and_crop_image(image, self.COLOR_WIDTH, self.COLOR_HEIGHT)
-                    # Apply Floyd-Steinberg dithering for e-ink display
-                    dithered_image = self._apply_floyd_steinberg_dithering(resized_image)
-                    return dithered_image
+            print(f"✓ Gemini API call completed, processing response...")
+            print(f"Response object type: {type(image_response)}")
+            print(f"Response candidates count: {len(image_response.candidates) if hasattr(image_response, 'candidates') else 'No candidates'}")
+            
+            if hasattr(image_response, 'candidates') and image_response.candidates:
+                candidate = image_response.candidates[0]
+                print(f"First candidate content parts count: {len(candidate.content.parts) if hasattr(candidate.content, 'parts') else 'No parts'}")
+                
+                # Extract and process the generated image
+                for i, part in enumerate(candidate.content.parts):
+                    print(f"Processing part {i+1}: type={type(part)}")
+                    if hasattr(part, 'inline_data') and part.inline_data is not None:
+                        print(f"✓ Found inline image data in part {i+1}")
+                        print(f"Image data size: {len(part.inline_data.data)} bytes")
+                        print(f"Image mime type: {getattr(part.inline_data, 'mime_type', 'unknown')}")
+                        
+                        try:
+                            image = Image.open(BytesIO(part.inline_data.data))
+                            print(f"✓ Image loaded successfully: {image.size[0]}x{image.size[1]} pixels, mode: {image.mode}")
+                            
+                            # Resize and crop to fit 800x480 display
+                            print(f"Resizing and cropping image to {self.COLOR_WIDTH}x{self.COLOR_HEIGHT}...")
+                            resized_image = self._resize_and_crop_image(image, self.COLOR_WIDTH, self.COLOR_HEIGHT)
+                            print(f"✓ Image resized successfully")
+                            
+                            # Apply Floyd-Steinberg dithering for e-ink display
+                            print(f"Applying Floyd-Steinberg dithering...")
+                            dithered_image = self._apply_floyd_steinberg_dithering(resized_image)
+                            print(f"✓ Dithering completed successfully")
+                            
+                            # Save debug copy
+                            dithered_image.save('debug_generated_image.png')
+                            print(f"✓ Debug image saved as debug_generated_image.png")
+                            
+                            return dithered_image
+                            
+                        except Exception as img_error:
+                            print(f"✗ Error processing image data: {img_error}")
+                            continue
+                    else:
+                        print(f"Part {i+1} has no inline_data or inline_data is None")
+                        if hasattr(part, 'text'):
+                            print(f"Part {i+1} contains text: {part.text[:100]}...")
+            else:
+                print(f"✗ No candidates found in response")
             
             # If no image was generated, fall back to text-based image
-            print("No image generated, using fallback")
+            print("✗ No image generated from Gemini API, using fallback")
             return self._create_fallback_color_image(weather_summary, events)
             
         except Exception as e:
-            print(f"Gemini image generation error: {e}")
+            print(f"✗ Gemini image generation error: {e}")
+            print(f"Exception type: {type(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             return self._create_fallback_color_image(weather_summary, events)
     
     def _create_prompt_generation_request(self, weather_summary: str, events: List[Dict]) -> str:

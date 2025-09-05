@@ -154,15 +154,19 @@ class WeatherService:
             current = self.get_current_weather()
             forecast = self.get_forecast(days=1)
             
-            summary_parts = [
-                f"Current weather in {current['location']}: {current['temperature']}°C, {current['description']}"
-            ]
-            
+            # Use max temperature from today's forecast instead of current temp
             if forecast['forecasts']:
                 today_forecast = forecast['forecasts'][0]
-                summary_parts.append(
-                    f"Today's forecast: {today_forecast['temp_min']}-{today_forecast['temp_max']}°C, {today_forecast['description']}"
-                )
+                summary_parts = [
+                    f"Weather in {current['location']}: Expected high {today_forecast['temp_max']}°C, {today_forecast['description']}"
+                ]
+                if today_forecast['temp_min'] != today_forecast['temp_max']:
+                    summary_parts[0] = f"Weather in {current['location']}: {today_forecast['temp_min']}-{today_forecast['temp_max']}°C, {today_forecast['description']}"
+            else:
+                # Fallback to current weather if forecast unavailable
+                summary_parts = [
+                    f"Current weather in {current['location']}: {current['temperature']}°C, {current['description']}"
+                ]
             
             return ". ".join(summary_parts)
             
