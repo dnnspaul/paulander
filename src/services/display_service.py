@@ -38,6 +38,13 @@ else:
         import gpiozero
         print("RPi.GPIO, spidev, and gpiozero available")
         
+        # Clean up any existing GPIO state before importing
+        try:
+            GPIO.cleanup()
+            print("Cleaned up existing GPIO state")
+        except:
+            pass
+        
         # Try to import the waveshare library
         from waveshare_epd import epd7in3e
         print("Successfully imported epd7in3e module")
@@ -52,7 +59,8 @@ else:
     except RuntimeError as e:
         print(f"Warning: GPIO hardware initialization failed: {e}")
         print("Display functions will be mocked.")
-        print("This is normal if the e-paper display is not connected or GPIO permissions are insufficient.")
+        print("GPIO pin conflict detected. Try running: sudo sh -c 'echo 24 > /sys/class/gpio/unexport'")
+        print("Or reboot the Raspberry Pi to reset GPIO state")
         print("To force mock mode, set environment variable: FORCE_MOCK_DISPLAY=true")
         epd7in3e = None
         
