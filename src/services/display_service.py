@@ -439,7 +439,7 @@ class DisplayService:
                     if chunks_sent % 5 == 0:  # Progress every 5 chunks
                         print(f"Progress: {chunks_sent}/{total_chunks} chunks sent ({total_bytes_sent} bytes)")
                     
-                    time.sleep(0.05)  # 50ms delay between chunks for reliability
+                    time.sleep(0.02)  # 20ms delay between chunks for better timing
                     
                 except Exception as chunk_error:
                     print(f"✗ Chunk {chunk_num} ({actual_chunk_size} bytes) failed: {chunk_error}")
@@ -447,12 +447,24 @@ class DisplayService:
             
             print(f"✓ Transmission completed: {chunks_sent}/{total_chunks} chunks sent ({total_bytes_sent} total bytes)")
             
+            # If transmission was incomplete, wait and check ESP32 status
+            if chunks_sent < total_chunks:
+                print(f"⚠ Incomplete transmission! Only {chunks_sent}/{total_chunks} chunks sent")
+            
+            # Give ESP32 time to process all chunks before status check
+            time.sleep(0.1)
+            
             # Read ESP32 status
             try:
                 status = self.i2c_bus.read_byte(ESP32_I2C_ADDRESS)
                 print(f"✓ ESP32 status: {'Data received' if status == 1 else 'Waiting for data'}")
-            except:
-                print("✓ Data sent (status read failed)")
+                
+                # If ESP32 still waiting and we sent all chunks, there might be a timing issue
+                if status == 0 and chunks_sent == total_chunks:
+                    print("⚠ ESP32 status shows 'waiting' despite complete transmission")
+                
+            except Exception as status_error:
+                print(f"✓ Data sent (status read failed: {status_error})")
             
         except Exception as e:
             print(f"✗ I2C communication failed: {e}")

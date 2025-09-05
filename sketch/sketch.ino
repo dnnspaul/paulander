@@ -113,6 +113,8 @@ void loop() {
       i2cDataReady = true;
     } else {
       Serial.println("Insufficient data - resetting buffer");
+      // Clear the buffer completely to avoid contamination
+      memset(i2cBuffer, 0, sizeof(i2cBuffer));
     }
     
     totalDataReceived = 0;
