@@ -5,6 +5,7 @@ import numpy as np
 from datetime import datetime
 from typing import Dict, Any, List
 from io import BytesIO
+import json
 import google.generativeai as genai
 from google import genai as genai_new
 from google.genai import types
@@ -519,113 +520,46 @@ class DisplayService:
             self._create_mock_bw_display()
     
     def _prepare_esp32_data(self):
-        """Prepare data structure for ESP32 communication with proper alignment"""
-        # The ESP32 expects 740 bytes due to structure padding, let's match that
-        data = bytearray(740)  # Pre-allocate to exact ESP32 size
-        offset = 0
-        
-        print(f"Preparing data for ESP32 (target size: 740 bytes)")
+        """Prepare JSON data for ESP32 communication"""
+        print(f"Preparing JSON data for ESP32")
         print(f"Weather: {self.cached_weather_data['temperature']}°C, {self.cached_weather_data['description']}")
         
-        # Weather data structure (should be 104 bytes, but may be padded to 108 due to alignment)
-        # float temperature (4 bytes)
-        struct.pack_into('<f', data, offset, float(self.cached_weather_data['temperature']))
-        offset += 4
+        # Prepare events data - only send the events we have
+        events_data = []
+        print(f"DEBUG: Preparing {len(self.cached_calendar_data)} calendar events for JSON:")
         
-        # char description[64] (64 bytes)
-        desc_bytes = self.cached_weather_data['description'].encode('utf-8')[:63]
-        data[offset:offset+64] = desc_bytes.ljust(64, b'\x00')
-        offset += 64
+        for i, event in enumerate(self.cached_calendar_data[:6]):  # Limit to 6 events
+            event_data = {
+                "title": event['title'][:63],  # Limit title length
+                "location": event['location'] if event['location'] != 'None' else '',
+                "start_time": event['start_time'],
+                "valid": event['valid']
+            }
+            events_data.append(event_data)
+            print(f"DEBUG: Event {i+1}: '{event_data['title']}' at {event_data['start_time']} location: '{event_data['location']}' valid: {event_data['valid']}")
         
-        # char location[32] (32 bytes)
-        loc_bytes = self.cached_weather_data['location'].encode('utf-8')[:31]  
-        data[offset:offset+32] = loc_bytes.ljust(32, b'\x00')
-        offset += 32
+        # Create complete data structure
+        json_data = {
+            "weather": {
+                "temperature": float(self.cached_weather_data['temperature']),
+                "description": self.cached_weather_data['description'][:63],
+                "location": self.cached_weather_data['location'][:31],
+                "timestamp": self.cached_weather_data['timestamp']
+            },
+            "events": events_data,
+            "event_count": len(events_data),
+            "timestamp": int(time.time())
+        }
         
-        # uint32_t timestamp (4 bytes)
-        struct.pack_into('<I', data, offset, self.cached_weather_data['timestamp'])
-        offset += 4
+        # Convert to JSON string and encode to bytes
+        json_string = json.dumps(json_data, separators=(',', ':'))  # Compact JSON
+        json_bytes = json_string.encode('utf-8')
         
-        # Add padding to align to 4-byte boundary if needed
-        while offset % 4 != 0:
-            offset += 1
+        print(f"JSON data prepared: {len(json_bytes)} bytes")
+        print(f"Event count: {len(events_data)}")
+        print(f"JSON preview (first 100 chars): {json_string[:100]}...")
         
-        weather_end = offset
-        print(f"Weather data ends at offset: {weather_end}")
-        
-        # Calendar events - each should be 101 bytes, but may be padded
-        print(f"DEBUG: Packing {len(self.cached_calendar_data)} calendar events:")
-        for i in range(6):
-            event_start = offset
-            
-            if i < len(self.cached_calendar_data):
-                event = self.cached_calendar_data[i]
-                print(f"DEBUG: Event {i+1}: '{event['title']}' at {event['start_time']} location: '{event['location']}' valid: {event['valid']}")
-                
-                # char title[64] (64 bytes)
-                title_bytes = event['title'].encode('utf-8')[:63]
-                data[offset:offset+64] = title_bytes.ljust(64, b'\x00')
-                offset += 64
-                
-                # char location[32] (32 bytes)
-                event_loc = event['location'] if event['location'] != 'None' else ''
-                event_loc_bytes = event_loc.encode('utf-8')[:31]
-                data[offset:offset+32] = event_loc_bytes.ljust(32, b'\x00')
-                offset += 32
-                
-                # uint32_t start_time (4 bytes)
-                struct.pack_into('<I', data, offset, event['start_time'])
-                offset += 4
-                
-                # bool valid (1 byte)
-                struct.pack_into('B', data, offset, 1 if event['valid'] else 0)
-                offset += 1
-                
-                print(f"DEBUG: Event {i+1} packed at offset {event_start}-{offset-1} ({offset-event_start} bytes)")
-            else:
-                # Empty event slot - fill with zeros
-                print(f"DEBUG: Event {i+1}: Empty slot")
-                data[offset:offset+101] = b'\x00' * 101
-                offset += 101
-            
-            # Add padding to align each event structure to 4-byte boundary
-            while (offset - event_start) % 4 != 0:
-                offset += 1
-        
-        events_end = offset
-        print(f"Events data ends at offset: {events_end}")
-        
-        # uint8_t event_count (1 byte)
-        event_count = min(len(self.cached_calendar_data), 6)
-        print(f"DEBUG: Setting event_count to {event_count} at offset {offset}")
-        struct.pack_into('B', data, offset, event_count)
-        offset += 1
-        
-        # Add padding before uint32_t fields
-        while offset % 4 != 0:
-            offset += 1
-        
-        # uint32_t data_hash (4 bytes) - will be calculated by ESP32
-        struct.pack_into('<I', data, offset, 0)
-        offset += 4
-        
-        # uint32_t timestamp (4 bytes)
-        current_timestamp = int(time.time())
-        print(f"DEBUG: Setting timestamp to {current_timestamp} at offset {offset-4}")
-        struct.pack_into('<I', data, offset, current_timestamp)
-        offset += 4
-        
-        print(f"Final data size: {len(data)} bytes, used: {offset} bytes")
-        print(f"Temperature packed: {struct.unpack('<f', data[0:4])[0]:.1f}°C")
-        
-        # Extract description safely for f-string
-        desc_bytes = data[4:68].rstrip(b'\x00').decode('utf-8', errors='ignore')
-        print(f"Description: {desc_bytes}")
-        
-        # Debug: Show first 16 bytes in hex
-        print("First 16 bytes:", ' '.join([f"0x{b:02X}" for b in data[:16]]))
-        
-        return data
+        return json_bytes
     
     def _create_mock_bw_display(self):
         """Create mock B&W display output when I2C is not available"""

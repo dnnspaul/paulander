@@ -4,6 +4,7 @@
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include <Fonts/FreeMonoBold12pt7b.h>
 #include <Fonts/FreeMono9pt7b.h>
+#include <ArduinoJson.h>
 
 // Pin definitions for 7.5" B&W e-paper display
 #define EPD_CS     5
@@ -52,12 +53,13 @@ bool displayInitialized = false;
 unsigned long lastDisplayUpdate = 0;
 const unsigned long DISPLAY_UPDATE_INTERVAL = 1800000; // 30 minutes in ms
 
-// I2C receive buffer - larger to handle complete data structure
-uint8_t i2cBuffer[800];  // Increased size to handle 719+ bytes
+// I2C receive buffer - 2KB to handle complete data structure with headroom
+uint8_t i2cBuffer[2048];  // 2KB buffer for reliable data reception
 volatile bool i2cDataReady = false;
 volatile int i2cDataLength = 0;
 volatile int totalDataReceived = 0;
 volatile bool receivingMultipart = false;
+volatile unsigned long lastReceiveTime = 0;  // Global variable for timeout tracking
 
 void setup() {
   Serial.begin(115200);
@@ -85,6 +87,9 @@ void setup() {
   memset(&currentData, 0, sizeof(DisplayData));
   memset(&previousData, 0, sizeof(DisplayData));
   
+  // Initialize I2C timing
+  lastReceiveTime = millis();
+  
   Serial.println("ESP32 ready for I2C communication");
   Serial.println("Waiting for data from Raspberry Pi...");
   
@@ -102,12 +107,11 @@ void loop() {
   }
   
   // Check for I2C receive timeout
-  static unsigned long lastReceiveTime = millis();
   if (receivingMultipart && (millis() - lastReceiveTime > 15000)) {  // Increased to 15 seconds
-    Serial.printf("I2C receive timeout - received %d bytes (expected: %d)\n", totalDataReceived, sizeof(DisplayData));
+    Serial.printf("I2C receive timeout - received %d bytes (expected JSON data)\n", totalDataReceived);
     
-    // If we received close to expected amount, try to process it
-    if (totalDataReceived >= 690) {  // More flexible - accept 698 bytes
+    // If we received reasonable JSON data, try to process it
+    if (totalDataReceived >= 100) {  // Accept JSON of at least 100 bytes
       Serial.println("Data size close to expected - processing anyway");
       i2cDataLength = totalDataReceived;
       i2cDataReady = true;
@@ -135,7 +139,7 @@ void loop() {
   static unsigned long lastKeepAlive = 0;
   if (millis() - lastKeepAlive > 10000) {
     if (receivingMultipart) {
-      Serial.printf("ESP32 running... (receiving multipart: %d/%d bytes)\n", totalDataReceived, sizeof(DisplayData));
+      Serial.printf("ESP32 running... (receiving multipart: %d bytes received)\n", totalDataReceived);
     } else {
       Serial.println("ESP32 running... waiting for I2C data");
     }
@@ -220,8 +224,8 @@ void onI2CReceive(int length) {
     }
     
     // Check if we have received enough data
-    // Accept data if we received the expected amount (740 bytes)
-    if (totalDataReceived >= 740) {
+    // For JSON, we need at least 50 bytes, but wait for more complete data
+    if (totalDataReceived >= 200) {  // Wait for reasonable JSON size
       Serial.printf("Complete data received: %d bytes (expected: %d)\n", totalDataReceived, sizeof(DisplayData));
       i2cDataLength = totalDataReceived;
       i2cDataReady = true;
@@ -231,8 +235,7 @@ void onI2CReceive(int length) {
       // We're in the middle of receiving a multi-part message
       receivingMultipart = true;
       
-      // Set timeout to reset if we don't get more data within 3 seconds
-      static unsigned long lastReceiveTime = millis();
+      // Update global timeout timer
       lastReceiveTime = millis();
       
       // Check for timeout in main loop
@@ -248,9 +251,9 @@ void onI2CRequest() {
 }
 
 void processI2CData() {
-  Serial.printf("Processing I2C data: %d bytes (DisplayData size: %d)\n", i2cDataLength, sizeof(DisplayData));
+  Serial.printf("Processing I2C data: %d bytes\n", i2cDataLength);
   
-  if (i2cDataLength >= 690) {  // Accept data close to 698-740 bytes
+  if (i2cDataLength >= 50) {  // JSON should be at least 50 bytes
     // Check if data starts with register byte 0xFF and skip it
     uint8_t* dataStart = i2cBuffer;
     int actualDataLength = i2cDataLength;
@@ -261,39 +264,48 @@ void processI2CData() {
       actualDataLength -= 1;
     }
     
-    // Debug: Show raw data at key offsets
-    Serial.println("=== Raw Data Debug ===");
-    Serial.printf("Data starts at offset: %d\n", (dataStart - i2cBuffer));
-    Serial.printf("Bytes 0-3 (temp): 0x%02X 0x%02X 0x%02X 0x%02X\n", 
-                  dataStart[0], dataStart[1], dataStart[2], dataStart[3]);
-    Serial.printf("Bytes 4-10 (desc): ");
-    for (int i = 4; i < 11; i++) {
-      Serial.printf("0x%02X ", dataStart[i]);
+    // Null-terminate the JSON string
+    dataStart[actualDataLength] = '\0';
+    
+    Serial.println("=== JSON Data Debug ===");
+    Serial.printf("JSON length: %d bytes\n", actualDataLength);
+    Serial.printf("JSON data: %s\n", (char*)dataStart);
+    
+    // Parse JSON
+    DynamicJsonDocument doc(2048);  // 2KB for JSON parsing
+    DeserializationError error = deserializeJson(doc, (char*)dataStart);
+    
+    if (error) {
+      Serial.printf("✗ JSON parsing failed: %s\n", error.c_str());
+      return;
     }
-    Serial.println();
     
-    // Show as float for temperature
-    float* temp_ptr = (float*)&dataStart[0];
-    Serial.printf("Temperature as float: %.2f\n", *temp_ptr);
+    Serial.println("✓ JSON parsed successfully");
     
-    // Show description string
-    Serial.printf("Description string: '");
-    for (int i = 4; i < 68 && i < actualDataLength; i++) {
-      if (dataStart[i] >= 32 && dataStart[i] <= 126) {
-        Serial.printf("%c", dataStart[i]);
-      } else if (dataStart[i] == 0) {
-        break;
-      }
+    // Extract weather data
+    currentData.weather.temperature = doc["weather"]["temperature"];
+    strncpy(currentData.weather.description, doc["weather"]["description"] | "", sizeof(currentData.weather.description) - 1);
+    strncpy(currentData.weather.location, doc["weather"]["location"] | "", sizeof(currentData.weather.location) - 1);
+    currentData.weather.timestamp = doc["weather"]["timestamp"];
+    
+    // Extract events data
+    currentData.event_count = doc["event_count"];
+    if (currentData.event_count > 6) currentData.event_count = 6;  // Safety check
+    
+    JsonArray events = doc["events"];
+    for (int i = 0; i < currentData.event_count && i < 6; i++) {
+      strncpy(currentData.events[i].title, events[i]["title"] | "", sizeof(currentData.events[i].title) - 1);
+      strncpy(currentData.events[i].location, events[i]["location"] | "", sizeof(currentData.events[i].location) - 1);
+      currentData.events[i].start_time = events[i]["start_time"];
+      currentData.events[i].valid = events[i]["valid"];
     }
-    Serial.println("'");
     
-    // Copy received data (skip register byte if present)
-    memcpy(&currentData, dataStart, min((int)sizeof(DisplayData), actualDataLength));
+    currentData.timestamp = doc["timestamp"];
     
     // Calculate hash of current data for change detection
     uint32_t newHash = calculateDataHash(&currentData);
     
-    Serial.println("=== I2C Data Processed Successfully ===");
+    Serial.println("=== JSON Data Processed Successfully ===");
     Serial.printf("Temperature: %.1f°C\n", currentData.weather.temperature);
     Serial.printf("Weather: %s\n", currentData.weather.description);
     Serial.printf("Location: %s\n", currentData.weather.location);
@@ -333,7 +345,7 @@ void processI2CData() {
     currentData.data_hash = newHash;
     dataReceived = true;
   } else {
-    Serial.printf("✗ Insufficient I2C data: %d bytes (expected: %d)\n", i2cDataLength, sizeof(DisplayData));
+    Serial.printf("✗ Insufficient I2C data: %d bytes (expected: 50+ bytes for JSON)\n", i2cDataLength);
   }
 }
 
