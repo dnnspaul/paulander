@@ -10,32 +10,26 @@ from src.services.calendar_service import CalendarService
 
 # Add the waveshare library path from git submodule
 waveshare_lib_path = os.path.join(os.path.dirname(__file__), '../../waveshare-epaper/RaspberryPi_JetsonNano/python/lib')
+sys.path.append(waveshare_lib_path)
 
 # Check if we should force mock mode (useful for development)
 FORCE_MOCK_DISPLAY = os.getenv('FORCE_MOCK_DISPLAY', 'false').lower() == 'true'
-
-# Debug: Check if the path exists and add to sys.path
-if os.path.exists(waveshare_lib_path):
-    print(f"Waveshare library path exists: {waveshare_lib_path}")
-    sys.path.append(waveshare_lib_path)
-    # List contents for debugging
-    try:
-        contents = os.listdir(waveshare_lib_path)
-        print(f"Library contents: {contents}")
-    except Exception as e:
-        print(f"Error listing directory: {e}")
-else:
-    print(f"Waveshare library path not found: {waveshare_lib_path}")
-    waveshare_lib_path = None
 
 if FORCE_MOCK_DISPLAY:
     print("FORCE_MOCK_DISPLAY is enabled - display functions will be mocked")
     epd7in3e = None
 else:
-    # Don't import the Waveshare library at startup - only when needed
-    # This prevents GPIO conflicts during Flask startup
-    epd7in3e = None
-    print("Display module will be imported when first used")
+    try:
+        from waveshare_epd import epd7in3e
+        print("Successfully imported epd7in3e module")
+    except ImportError as e:
+        print(f"Warning: Waveshare e-paper library not available: {e}")
+        print("Display functions will be mocked.")
+        epd7in3e = None
+    except Exception as e:
+        print(f"Warning: Error importing display module: {e}")
+        print("Display functions will be mocked.")
+        epd7in3e = None
 
 class DisplayService:
     def __init__(self):
@@ -49,69 +43,18 @@ class DisplayService:
         self.BW_WIDTH = 800  # These will be sent to ESP32 via I2C
         self.BW_HEIGHT = 480
         
-        # Don't initialize color display here - do it lazily when needed
+        # Initialize color display
         self.color_epd = None
-        self.epd7in3e_module = epd7in3e
-    
-    def _init_color_display(self):
-        """Lazily initialize the color display when needed"""
-        if self.color_epd is None:
+        if epd7in3e:
             try:
-                # Import the module only when we need it
-                if self.epd7in3e_module is None and not FORCE_MOCK_DISPLAY and waveshare_lib_path:
-                    print("Importing Waveshare epd7in3e module...")
-                    
-                    # Check if required system libraries are available
-                    import RPi.GPIO as GPIO
-                    import spidev
-                    import numpy
-                    import PIL
-                    print("RPi.GPIO, spidev, numpy, and PIL available")
-                    
-                    # Import the waveshare library
-                    from waveshare_epd import epd7in3e
-                    self.epd7in3e_module = epd7in3e
-                    print("Successfully imported epd7in3e module")
-                
-                if self.epd7in3e_module is not None:
-                    print("Initializing color e-paper display...")
-                    self.color_epd = self.epd7in3e_module.EPD()
-                    self.color_epd.init()
-                    print("Color display initialized successfully")
-                    return True
-                else:
-                    print("Waveshare module not available - using mock mode")
-                    return False
-                    
-            except ImportError as e:
-                print(f"Warning: Waveshare e-paper library not available: {e}")
-                print("Display functions will be mocked.")
-                return False
-                
-            except RuntimeError as e:
-                print(f"Warning: GPIO hardware initialization failed: {e}")
-                print("Display functions will be mocked.")
-                print("GPIO pin conflict detected. Try running: sudo sh -c 'echo 24 > /sys/class/gpio/unexport'")
-                print("Or reboot the Raspberry Pi to reset GPIO state")
-                return False
-                
+                self.color_epd = epd7in3e.EPD()
+                print("Color display initialized successfully")
             except Exception as e:
                 print(f"Warning: Could not initialize color display: {e}")
-                return False
-                
-        return self.color_epd is not None
 
     def get_status(self) -> Dict[str, str]:
         """Get display status"""
-        if FORCE_MOCK_DISPLAY:
-            color_status = "mocked"
-        elif self.color_epd:
-            color_status = "active"
-        elif waveshare_lib_path:
-            color_status = "available"
-        else:
-            color_status = "unavailable"
-            
+        color_status = "active" if self.color_epd else "unavailable"
         bw_status = "active"  # Assume ESP32 connection is always available
         
         return {
@@ -169,10 +112,12 @@ class DisplayService:
             # Generate AI image based on today's events and weather
             image = self.generate_daily_image()
             
-            # Try to initialize the display if not already done
-            if self._init_color_display():
-                # Clear and display the image
+            if self.color_epd:
+                # Initialize display
+                self.color_epd.init()
                 self.color_epd.Clear()
+                
+                # Display the image
                 self.color_epd.display(self.color_epd.getbuffer(image))
                 
                 # Put display to sleep to save power
@@ -400,8 +345,8 @@ class DisplayService:
     def cleanup(self):
         """Clean up GPIO resources"""
         try:
-            if self.epd7in3e_module:
-                self.epd7in3e_module.epdconfig.module_exit(cleanup=True)
+            if epd7in3e:
+                epd7in3e.epdconfig.module_exit(cleanup=True)
                 print("Display GPIO cleanup completed")
         except Exception as e:
             print(f"Error during cleanup: {e}")
