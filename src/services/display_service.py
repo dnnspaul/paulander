@@ -415,6 +415,9 @@ class DisplayService:
             # Send data via I2C using simple write method (better for large data)
             print(f"Sending {len(data)} bytes to ESP32 at address 0x{ESP32_I2C_ADDRESS:02X}")
             
+            # Wait a moment to ensure ESP32 is ready for new transmission
+            time.sleep(0.1)
+            
             # Send data in chunks (I2C has strict limits)
             # Use 31 bytes per chunk to account for register byte in smbus2
             chunk_size = 31
@@ -430,9 +433,10 @@ class DisplayService:
                 actual_chunk_size = len(chunk)
                 
                 try:
-                    # Simple write without register address to avoid size limits
+                    # Use raw I2C write to send data exactly as-is
                     chunk_list = list(chunk)
-                    self.i2c_bus.write_i2c_block_data(ESP32_I2C_ADDRESS, 0, chunk_list)
+                    # This sends the data without any register prefix
+                    self.i2c_bus.write_i2c_block_data(ESP32_I2C_ADDRESS, 0xFF, chunk_list)
                     chunks_sent += 1
                     total_bytes_sent += actual_chunk_size
                     
