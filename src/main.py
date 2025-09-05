@@ -18,12 +18,7 @@ app.register_blueprint(api_bp, url_prefix='/api')
 app.register_blueprint(web_bp)
 
 scheduler = SchedulerService()
-
-@app.before_request
-def start_scheduler():
-    if not hasattr(start_scheduler, 'started'):
-        scheduler.start()
-        start_scheduler.started = True
+scheduler.start()  # Start scheduler immediately when app loads
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=os.getenv('FLASK_ENV') == 'development')

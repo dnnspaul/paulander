@@ -15,10 +15,18 @@ class SchedulerService:
     def start(self):
         """Start the scheduler"""
         if not self.running:
-            self._setup_jobs()
-            self.scheduler.start()
-            self.running = True
-            print("Scheduler started")
+            try:
+                self._setup_jobs()
+                self.scheduler.start()
+                self.running = True
+                print("Scheduler started")
+            except Exception as e:
+                if "already running" in str(e).lower():
+                    print("Scheduler already running")
+                    self.running = True
+                else:
+                    print(f"Failed to start scheduler: {e}")
+                    raise
     
     def stop(self):
         """Stop the scheduler"""
