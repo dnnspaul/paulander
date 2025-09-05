@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Paulander{% endblock %}
+
+{% block content %}
+<div id="app">
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-6">Configuration</h3>
+            
+            <!-- Success/Error Messages -->
+            <div v-if="message.text" :class="message.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'" 
+                 class="border rounded-md p-4 mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i :class="message.type === 'success' ? 'fas fa-check-circle text-green-400' : 'fas fa-exclamation-circle text-red-400'"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm font-medium">{{ message.text }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <form @submit.prevent="saveConfig" class="space-y-6">
+                <!-- Calendar Settings -->
+                <div class="border-b border-gray-200 pb-6">
+                    <h4 class="text-lg font-medium text-gray-900 mb-4">
+                        <i class="fas fa-calendar mr-2 text-green-600"></i>
+                        Calendar Settings
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Apple ID</label>
+                            <input v-model="config.apple_id" type="email" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                   placeholder="your.email@icloud.com">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">App Password</label>
+                            <div class="relative">
+                                <input v-model="config.app_password" :type="showPassword ? 'text' : 'password'"
+                                       class="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                       placeholder="App-specific password">
+                                <button type="button" @click="showPassword = !showPassword" 
+                                        class="absolute inset-y-0 right-0 pr-3 flex items-center">
+                                    <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'" class="text-gray-400"></i>
+                                </button>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Create an app-specific password in your Apple ID settings</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button type="button" @click="testCalendar" :disabled="testing"
+                                class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">
+                            <i class="fas fa-plug mr-2" :class="{'fa-spin': testing}"></i>
+                            <span v-if="testing">Testing Connection...</span>
+                            <span v-else>Test Calendar Connection</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Weather Settings -->
+                <div class="border-b border-gray-200 pb-6">
+                    <h4 class="text-lg font-medium text-gray-900 mb-4">
+                        <i class="fas fa-cloud-sun mr-2 text-blue-600"></i>
+                        Weather Settings
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Location</label>
+                            <input v-model="config.weather_location" type="text"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                   placeholder="Berlin, DE">
+                            <p class="mt-1 text-xs text-gray-500">City name or coordinates</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">OpenWeather API Key</label>
+                            <input v-model="config.openweather_api_key" type="password"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                   placeholder="Your API key">
+                            <p class="mt-1 text-xs text-gray-500">Get your free API key from openweathermap.org</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Display Settings -->
+                <div class="border-b border-gray-200 pb-6">
+                    <h4 class="text-lg font-medium text-gray-900 mb-4">
+                        <i class="fas fa-tv mr-2 text-purple-600"></i>
+                        Display Settings
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">B&W Display Refresh Interval (minutes)</label>
+                            <input v-model.number="config.display_refresh_interval" type="number" min="1" max="120"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <p class="mt-1 text-xs text-gray-500">How often to refresh the black & white display</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Color Display Refresh Time</label>
+                            <input v-model="config.color_display_refresh_time" type="time"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <p class="mt-1 text-xs text-gray-500">Daily refresh time for the color display</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- AI Settings -->
+                <div>
+                    <h4 class="text-lg font-medium text-gray-900 mb-4">
+                        <i class="fas fa-robot mr-2 text-indigo-600"></i>
+                        AI Image Generation
+                    </h4>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Gemini API Key</label>
+                        <input v-model="config.gemini_api_key" type="password"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                               placeholder="Your Gemini API key">
+                        <p class="mt-1 text-xs text-gray-500">For AI-generated daily images based on calendar and weather</p>
+                    </div>
+                </div>
+                
+                <!-- Save Button -->
+                <div class="pt-6">
+                    <div class="flex justify-end">
+                        <button type="submit" :disabled="saving"
+                                class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50">
+                            <i class="fas fa-save mr-2" :class="{'fa-spin': saving}"></i>
+                            <span v-if="saving">Saving...</span>
+                            <span v-else>Save Configuration</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            config: {
+                apple_id: '',
+                app_password: '',
+                weather_location: 'Berlin',
+                openweather_api_key: '',
+                gemini_api_key: '',
+                display_refresh_interval: 30,
+                color_display_refresh_time: '06:00'
+            },
+            showPassword: false,
+            testing: false,
+            saving: false,
+            message: {
+                text: '',
+                type: ''
+            }
+        }
+    },
+    
+    methods: {
+        async loadConfig() {
+            try {
+                const response = await axios.get('/api/config');
+                this.config = { ...this.config, ...response.data };
+                this.config.display_refresh_interval = Math.round(this.config.display_refresh_interval / 60);
+            } catch (error) {
+                console.error('Error loading config:', error);
+                this.showMessage('Error loading configuration', 'error');
+            }
+        },
+        
+        async saveConfig() {
+            this.saving = true;
+            try {
+                const configToSave = {
+                    ...this.config,
+                    display_refresh_interval: this.config.display_refresh_interval * 60
+                };
+                await axios.post('/api/config', configToSave);
+                this.showMessage('Configuration saved successfully!', 'success');
+            } catch (error) {
+                console.error('Error saving config:', error);
+                this.showMessage('Error saving configuration', 'error');
+            }
+            this.saving = false;
+        },
+        
+        async testCalendar() {
+            if (!this.config.apple_id || !this.config.app_password) {
+                this.showMessage('Please enter both Apple ID and App Password', 'error');
+                return;
+            }
+            
+            this.testing = true;
+            try {
+                const response = await axios.post('/api/calendar/test', {
+                    apple_id: this.config.apple_id,
+                    app_password: this.config.app_password
+                });
+                
+                if (response.data.success) {
+                    this.showMessage('Calendar connection successful!', 'success');
+                } else {
+                    this.showMessage(response.data.message || 'Calendar connection failed', 'error');
+                }
+            } catch (error) {
+                console.error('Error testing calendar:', error);
+                this.showMessage('Error testing calendar connection', 'error');
+            }
+            this.testing = false;
+        },
+        
+        showMessage(text, type) {
+            this.message = { text, type };
+            setTimeout(() => {
+                this.message = { text: '', type: '' };
+            }, 5000);
+        }
+    },
+    
+    mounted() {
+        this.loadConfig();
+    }
+}).mount('#app');
+</script>
+{% endblock %}
