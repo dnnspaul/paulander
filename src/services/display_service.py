@@ -365,10 +365,18 @@ class DisplayService:
             self.cached_calendar_data = []
             
             for i, event in enumerate(events[:6]):  # Limit to 6 events
+                # Safely handle start time
+                start_time = 0
+                if event.get('start') and hasattr(event['start'], 'timestamp'):
+                    try:
+                        start_time = int(event['start'].timestamp())
+                    except (AttributeError, TypeError):
+                        start_time = 0
+                
                 event_data = {
                     'title': event.get('title', '')[:63],  # Limit to 63 chars
                     'location': event.get('location', '')[:31],  # Limit to 31 chars
-                    'start_time': int(event['start'].timestamp()) if event.get('start') else 0,
+                    'start_time': start_time,
                     'valid': bool(event.get('title'))
                 }
                 self.cached_calendar_data.append(event_data)
@@ -861,10 +869,18 @@ Make it vintage-poster style. Let it only generate an image without any title, d
                 events_raw = self.calendar_service.get_upcoming_events(days_ahead=3)
                 events = []
                 for event in events_raw[:6]:
+                    # Safely handle start time
+                    start_time = 0
+                    if event.get('start') and hasattr(event['start'], 'timestamp'):
+                        try:
+                            start_time = int(event['start'].timestamp())
+                        except (AttributeError, TypeError):
+                            start_time = 0
+                    
                     events.append({
                         'title': event.get('title', ''),
                         'location': event.get('location', ''),
-                        'start_time': int(event['start'].timestamp()) if event.get('start') else 0,
+                        'start_time': start_time,
                         'valid': bool(event.get('title'))
                     })
             except:
