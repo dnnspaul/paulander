@@ -202,6 +202,15 @@ void onI2CReceive(int length) {
     totalDataReceived += bytesRead;
     Serial.printf("I2C chunk received: %d bytes (total: %d)\n", bytesRead, totalDataReceived);
     
+    // Debug: Show first few bytes of this chunk if it's the first one
+    if (totalDataReceived <= 32) {
+      Serial.printf("First chunk bytes: ");
+      for (int i = 0; i < min(8, bytesRead); i++) {
+        Serial.printf("0x%02X ", i2cBuffer[totalDataReceived - bytesRead + i]);
+      }
+      Serial.println();
+    }
+    
     // Check if we have received enough data
     // Accept data if we received the expected amount (740 bytes)
     if (totalDataReceived >= 740) {
@@ -234,6 +243,31 @@ void processI2CData() {
   Serial.printf("Processing I2C data: %d bytes (DisplayData size: %d)\n", i2cDataLength, sizeof(DisplayData));
   
   if (i2cDataLength >= 690) {  // Accept data close to 698-740 bytes
+    // Debug: Show raw data at key offsets
+    Serial.println("=== Raw Data Debug ===");
+    Serial.printf("Bytes 0-3 (temp): 0x%02X 0x%02X 0x%02X 0x%02X\n", 
+                  i2cBuffer[0], i2cBuffer[1], i2cBuffer[2], i2cBuffer[3]);
+    Serial.printf("Bytes 4-10 (desc): ");
+    for (int i = 4; i < 11; i++) {
+      Serial.printf("0x%02X ", i2cBuffer[i]);
+    }
+    Serial.println();
+    
+    // Show as float for temperature
+    float* temp_ptr = (float*)&i2cBuffer[0];
+    Serial.printf("Temperature as float: %.2f\n", *temp_ptr);
+    
+    // Show description string
+    Serial.printf("Description string: '");
+    for (int i = 4; i < 68 && i < i2cDataLength; i++) {
+      if (i2cBuffer[i] >= 32 && i2cBuffer[i] <= 126) {
+        Serial.printf("%c", i2cBuffer[i]);
+      } else if (i2cBuffer[i] == 0) {
+        break;
+      }
+    }
+    Serial.println("'");
+    
     // Copy received data
     memcpy(&currentData, i2cBuffer, sizeof(DisplayData));
     

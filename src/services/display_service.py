@@ -554,6 +554,9 @@ class DisplayService:
         desc_bytes = data[4:68].rstrip(b'\x00').decode('utf-8', errors='ignore')
         print(f"Description: {desc_bytes}")
         
+        # Debug: Show first 16 bytes in hex
+        print("First 16 bytes:", ' '.join([f"0x{b:02X}" for b in data[:16]]))
+        
         return data
     
     def _create_mock_bw_display(self):
