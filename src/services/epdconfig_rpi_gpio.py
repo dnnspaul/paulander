@@ -83,6 +83,9 @@ class RaspberryPi:
         self.SPI.writebytes2(data)
 
     def module_init(self, cleanup=False):
+        # Ensure GPIO mode is set (in case it was reset by cleanup)
+        GPIO.setmode(GPIO.BCM)
+        
         # Power on the display
         GPIO.output(self.PWR_PIN, GPIO.HIGH)
         
