@@ -638,39 +638,27 @@ class DisplayService:
     
     def generate_daily_image(self) -> Image.Image:
         """Generate AI image based on calendar events and weather"""
-        try:
-            print("=== Starting daily image generation ===")
+        print("=== Starting daily image generation ===")
+        
+        # Get today's data
+        print("Fetching weather data...")
+        weather_summary = self.weather_service.get_weather_summary_for_ai()
+        print(f"✓ Weather summary: {weather_summary}")
+        
+        print("Fetching calendar events...")
+        events = self.calendar_service.get_today_events()
+        print(f"✓ Found {len(events)} events for today")
+        
+        # Generate image with Gemini
+        gemini_api_key = self.config_service.get('gemini_api_key')
+        
+        if not gemini_api_key:
+            raise ValueError("Gemini API key is required for image generation")
             
-            # Get today's data
-            print("Fetching weather data...")
-            weather_summary = self.weather_service.get_weather_summary_for_ai()
-            print(f"✓ Weather summary: {weather_summary}")
-            
-            print("Fetching calendar events...")
-            events = self.calendar_service.get_today_events()
-            print(f"✓ Found {len(events)} events for today")
-            
-            # Generate image with Gemini (if available)
-            gemini_api_key = self.config_service.get('gemini_api_key')
-            
-            if gemini_api_key:
-                print("✓ Gemini API key found, attempting AI image generation...")
-                try:
-                    result = self._generate_gemini_image(weather_summary, events)
-                    print("✓ AI image generation completed successfully")
-                    return result
-                except Exception as e:
-                    print(f"✗ AI image generation failed: {e}")
-                    print("Falling back to text-based image...")
-                    return self._create_fallback_color_image(weather_summary, events)
-            else:
-                print("✗ No Gemini API key configured, using fallback image...")
-                return self._create_fallback_color_image(weather_summary, events)
-                
-        except Exception as e:
-            print(f"✗ Error generating daily image: {e}")
-            print("Using emergency fallback image...")
-            return self._create_fallback_color_image("Weather unavailable", [])
+        print("✓ Gemini API key found, attempting AI image generation...")
+        result = self._generate_gemini_image(weather_summary, events)
+        print("✓ AI image generation completed successfully")
+        return result
     
     def _generate_gemini_image(self, weather_summary: str, events: List[Dict]) -> Image.Image:
         """Generate image using Gemini API with two-step process"""
@@ -753,16 +741,16 @@ class DisplayService:
             else:
                 print(f"✗ No candidates found in response")
             
-            # If no image was generated, fall back to text-based image
-            print("✗ No image generated from Gemini API, using fallback")
-            return self._create_fallback_color_image(weather_summary, events)
+            # If no image was generated, raise an error
+            print("✗ No image generated from Gemini API")
+            raise RuntimeError("Failed to generate image from Gemini API response")
             
         except Exception as e:
             print(f"✗ Gemini image generation error: {e}")
             print(f"Exception type: {type(e)}")
             import traceback
             print(f"Traceback: {traceback.format_exc()}")
-            return self._create_fallback_color_image(weather_summary, events)
+            raise
     
     def _create_prompt_generation_request(self, weather_summary: str, events: List[Dict]) -> str:
         """Create the prompt generation request for Gemini"""
@@ -915,53 +903,6 @@ class DisplayService:
         
         return Image.fromarray(img_array, 'RGB')
     
-    def _create_fallback_color_image(self, weather_summary: str, events: List[Dict]) -> Image.Image:
-        """Create a fallback image when AI generation is not available"""
-        # Create image with white background
-        image = Image.new('RGB', (self.COLOR_WIDTH, self.COLOR_HEIGHT), 'white')
-        draw = ImageDraw.Draw(image)
-        
-        # Try to load fonts
-        try:
-            title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
-            text_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
-            small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
-        except:
-            title_font = text_font = small_font = ImageFont.load_default()
-        
-        # Draw title
-        title = datetime.now().strftime("%A, %B %d, %Y")
-        draw.text((50, 50), title, fill='black', font=title_font)
-        
-        # Draw weather
-        draw.text((50, 120), "Weather:", fill='black', font=text_font)
-        weather_lines = self._wrap_text(weather_summary, text_font, self.COLOR_WIDTH - 100)
-        y_pos = 160
-        for line in weather_lines:
-            draw.text((50, y_pos), line, fill='blue', font=small_font)
-            y_pos += 25
-        
-        # Draw events
-        if events:
-            y_pos += 30
-            draw.text((50, y_pos), "Today's Events:", fill='black', font=text_font)
-            y_pos += 40
-            
-            for event in events[:4]:  # Show max 4 events
-                event_text = event['title']
-                if event['location']:
-                    event_text += f" @ {event['location']}"
-                
-                event_lines = self._wrap_text(event_text, small_font, self.COLOR_WIDTH - 100)
-                for line in event_lines:
-                    draw.text((50, y_pos), f"• {line}", fill='darkgreen', font=small_font)
-                    y_pos += 25
-                
-                if y_pos > self.COLOR_HEIGHT - 50:
-                    break
-        
-        # Apply Floyd-Steinberg dithering to fallback image as well
-        return self._apply_floyd_steinberg_dithering(image)
     
     def create_bw_display_image(self) -> Image.Image:
         """Create B&W display image with weather and calendar info using cached data"""
