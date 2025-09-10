@@ -236,20 +236,49 @@ class DisplayService:
                 epd_module = _load_epd7in3e()
                 
                 try:
-                    # Initialize display with proper error handling
+                    # Initialize display with proper error handling and retry logic
                     if not self.display_initialized:
                         print("First time initialization, cleaning up any previous state...")
                         try:
                             if epd_module:
                                 epd_module.epdconfig.module_exit(cleanup=True)
-                        except:
-                            pass
+                        except Exception as cleanup_error:
+                            print(f"Warning during cleanup: {cleanup_error}")
                         
                     print("Initializing display hardware...")
                     print(f"Using epdconfig: {epd_module.epdconfig.__name__}")
-                    self.color_epd.init()
-                    self.display_initialized = True
-                    print("✓ Display initialized")
+                    
+                    # Try display initialization with retry logic
+                    max_init_retries = 3
+                    init_success = False
+                    
+                    for attempt in range(max_init_retries):
+                        try:
+                            print(f"Display initialization attempt {attempt + 1}/{max_init_retries}")
+                            self.color_epd.init()
+                            init_success = True
+                            self.display_initialized = True
+                            print("✓ Display initialized successfully")
+                            break
+                        except Exception as init_error:
+                            print(f"✗ Initialization attempt {attempt + 1} failed: {init_error}")
+                            if attempt < max_init_retries - 1:
+                                print("Waiting 2 seconds before retry...")
+                                time.sleep(2)
+                                # Force cleanup between retries
+                                try:
+                                    if epd_module:
+                                        epd_module.epdconfig.module_exit(cleanup=True)
+                                        # Reinitialize the display object
+                                        self.color_epd = epd_module.EPD()
+                                        self.display_initialized = False
+                                except:
+                                    pass
+                            else:
+                                raise init_error
+                    
+                    if not init_success:
+                        raise Exception("Failed to initialize display after all retry attempts")
                     
                     print("Clearing display...")
                     self.color_epd.Clear()
@@ -360,6 +389,10 @@ class DisplayService:
             print("Fetching enhanced weather data...")
             weather = self.weather_service.get_enhanced_weather_for_display()
             
+            # Also fetch current weather for additional data (humidity, wind, icon)
+            print("Fetching current weather details for modern display...")
+            current_weather = self.weather_service.get_current_weather()
+            
             self.cached_weather_data = {
                 'current_temperature': weather.get('current_temperature', 0.0),
                 'current_description': weather.get('current_description', 'N/A')[:63],  # Limit to 63 chars
@@ -370,6 +403,10 @@ class DisplayService:
                 'tomorrow_max': weather.get('tomorrow_max'),
                 'tomorrow_description': weather.get('tomorrow_description', 'N/A')[:63] if weather.get('tomorrow_description') else None,
                 'location': weather.get('location', '')[:31],  # Limit to 31 chars
+                # Enhanced data for modern display
+                'weather_icon': current_weather.get('icon', '')[:7],  # OpenWeatherMap icon code
+                'humidity': int(current_weather.get('humidity', 0)),
+                'wind_speed': float(current_weather.get('wind_speed', 0.0)),
                 'timestamp': int(time.time())
             }
             print(f"✓ Enhanced weather cached:")
@@ -377,6 +414,7 @@ class DisplayService:
             print(f"  Today: {self.cached_weather_data['today_min']}-{self.cached_weather_data['today_max']}°C, {self.cached_weather_data['today_description']}")
             if self.cached_weather_data['tomorrow_min'] is not None:
                 print(f"  Tomorrow: {self.cached_weather_data['tomorrow_min']}-{self.cached_weather_data['tomorrow_max']}°C, {self.cached_weather_data['tomorrow_description']}")
+            print(f"  Modern data: Icon={self.cached_weather_data.get('weather_icon', 'N/A')}, Humidity={self.cached_weather_data.get('humidity', 0)}%, Wind={self.cached_weather_data.get('wind_speed', 0)}m/s")
             
             # Fetch calendar data
             print("Fetching calendar events...")
@@ -523,8 +561,9 @@ class DisplayService:
     
     def _prepare_esp32_data(self):
         """Prepare JSON data for ESP32 communication"""
-        print(f"Preparing enhanced JSON data for ESP32")
+        print(f"Preparing modern enhanced JSON data for ESP32")
         print(f"Weather - Current: {self.cached_weather_data['current_temperature']}°C, Today: {self.cached_weather_data['today_min']}-{self.cached_weather_data['today_max']}°C")
+        print(f"Modern data - Icon: {self.cached_weather_data.get('weather_icon', 'N/A')}, Humidity: {self.cached_weather_data.get('humidity', 0)}%, Wind: {self.cached_weather_data.get('wind_speed', 0)}m/s")
         
         # Prepare events data - only send the events we have
         events_data = []
@@ -549,6 +588,10 @@ class DisplayService:
                 "tomorrow_max": float(self.cached_weather_data['tomorrow_max']) if self.cached_weather_data['tomorrow_max'] is not None else None,
                 "tomorrow_description": self._sanitize_text_for_display(self.cached_weather_data['tomorrow_description'])[:63] if self.cached_weather_data['tomorrow_description'] else None,
                 "location": self._sanitize_text_for_display(self.cached_weather_data['location'])[:31],
+                # Enhanced modern display data
+                "weather_icon": self.cached_weather_data.get('weather_icon', '')[:7],
+                "humidity": int(self.cached_weather_data.get('humidity', 0)),
+                "wind_speed": float(self.cached_weather_data.get('wind_speed', 0.0)),
                 "timestamp": self.cached_weather_data['timestamp']
             },
             "events": events_data,

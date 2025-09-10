@@ -86,6 +86,18 @@ class RaspberryPi:
         # Ensure GPIO mode is set (in case it was reset by cleanup)
         GPIO.setmode(GPIO.BCM)
         
+        # Re-setup all GPIO pins to ensure they're properly configured
+        try:
+            GPIO.setup(self.RST_PIN, GPIO.OUT)
+            GPIO.setup(self.DC_PIN, GPIO.OUT)
+            GPIO.setup(self.CS_PIN, GPIO.OUT)
+            GPIO.setup(self.PWR_PIN, GPIO.OUT)
+            GPIO.setup(self.BUSY_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+            print("GPIO pins re-initialized in module_init")
+        except Exception as e:
+            print(f"GPIO setup failed in module_init: {e}")
+            return -1
+        
         # Power on the display
         GPIO.output(self.PWR_PIN, GPIO.HIGH)
         
@@ -108,16 +120,22 @@ class RaspberryPi:
         except:
             pass
 
-        # Turn off all pins
-        GPIO.output(self.RST_PIN, GPIO.LOW)
-        GPIO.output(self.DC_PIN, GPIO.LOW)
-        GPIO.output(self.CS_PIN, GPIO.LOW)
-        GPIO.output(self.PWR_PIN, GPIO.LOW)
-        logger.debug("close 5V, Module enters 0 power consumption ...")
+        # Turn off all pins with proper error handling
+        try:
+            GPIO.output(self.RST_PIN, GPIO.LOW)
+            GPIO.output(self.DC_PIN, GPIO.LOW)
+            GPIO.output(self.CS_PIN, GPIO.LOW)
+            GPIO.output(self.PWR_PIN, GPIO.LOW)
+            logger.debug("close 5V, Module enters 0 power consumption ...")
+        except Exception as e:
+            print(f"Error turning off GPIO pins during exit: {e}")
         
         if cleanup:
-            GPIO.cleanup()
-            print("GPIO cleanup completed")
+            try:
+                GPIO.cleanup()
+                print("GPIO cleanup completed")
+            except Exception as e:
+                print(f"Error during GPIO cleanup: {e}")
 
 # Global implementation instance
 implementation = None

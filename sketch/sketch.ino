@@ -34,6 +34,9 @@ struct WeatherData {
   char tomorrow_description[64];
   bool has_tomorrow_data;
   char location[32];
+  char weather_icon[8];  // Weather condition icon code (e.g., "01d", "02n")
+  int humidity;          // Humidity percentage
+  float wind_speed;      // Wind speed
   uint32_t timestamp;
 };
 
@@ -373,6 +376,12 @@ void processI2CData() {
     }
     
     strncpy(currentData.weather.location, doc["weather"]["location"] | "", sizeof(currentData.weather.location) - 1);
+    
+    // Extract new modern display fields
+    strncpy(currentData.weather.weather_icon, doc["weather"]["weather_icon"] | "", sizeof(currentData.weather.weather_icon) - 1);
+    currentData.weather.humidity = doc["weather"]["humidity"] | 0;
+    currentData.weather.wind_speed = doc["weather"]["wind_speed"] | 0.0;
+    
     currentData.weather.timestamp = doc["weather"]["timestamp"];
 
     // Extract events data
@@ -512,145 +521,338 @@ void updateDisplay() {
     return;
   }
 
-  Serial.println("=== Updating B&W Display ===");
+  Serial.println("=== Updating Modern B&W Display ===");
   Serial.printf("Updating display due to data changes (hash: %s)\n", currentData.received_hash);
 
   display.fillScreen(GxEPD_WHITE);
   display.setTextColor(GxEPD_BLACK);
 
-  // Weather section
-  drawWeatherSection();
+  // Modern card-based layout
+  drawModernHeader();
+  drawModernWeatherCards();
+  drawModernEventsTimeline();
+  drawModernFooter();
 
-  // Calendar section
-  drawCalendarSection();
-
-  // Footer with timestamp
-  drawFooter();
-
-  Serial.println("Refreshing display (this may take 10-30 seconds)...");
+  Serial.println("Refreshing modern display (this may take 10-30 seconds)...");
   unsigned long startTime = millis();
   display.display();
   unsigned long endTime = millis();
 
-  Serial.printf("✓ Display updated successfully in %lu ms\n", endTime - startTime);
+  Serial.printf("✓ Modern display updated successfully in %lu ms\n", endTime - startTime);
 }
 
-void drawWeatherSection() {
-  // Weather section header
-  display.setFont(&FreeMonoBold12pt7b);
-  display.setCursor(30, 50);
-  display.print("Wetter");
-  
-  // Current temperature - large and prominent
-  display.setFont(&FreeMonoBold12pt7b);
-  display.setCursor(30, 90);
-  display.print("Jetzt:");
-  display.setCursor(130, 90);
-  display.printf("%.1f°C", currentData.weather.current_temperature);
-  
-  // Current weather description
-  display.setFont(&FreeMono9pt7b);
-  display.setCursor(30, 115);
-  display.print(currentData.weather.current_description);
-  
-  // Today's min/max temperatures
+void drawModernHeader() {
+  // Modern header bar with date and location
   display.setFont(&FreeMonoBold9pt7b);
-  display.setCursor(30, 145);
-  display.print("Heute:");
-  display.setCursor(100, 145);
-  display.printf("%.0f-%.0f°C", currentData.weather.today_min, currentData.weather.today_max);
   
-  // Tomorrow's forecast (if available)
-  if (currentData.weather.has_tomorrow_data) {
-    display.setCursor(30, 170);
-    display.print("Morgen:");
-    display.setCursor(100, 170);
-    display.printf("%.0f-%.0f°C", currentData.weather.tomorrow_min, currentData.weather.tomorrow_max);
-  }
+  // Get current time for header
+  time_t now = currentData.timestamp;
+  struct tm* timeInfo = localtime(&now);
   
-  // Location (if available)
+  // Date on left
+  display.setCursor(20, 25);
+  display.printf("%02d.%02d.%d", timeInfo->tm_mday, timeInfo->tm_mon + 1, timeInfo->tm_year + 1900);
+  
+  // Time in center
+  display.setCursor(150, 25);
+  display.printf("%02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);
+  
+  // Location on right (if available)
   if (strlen(currentData.weather.location) > 0) {
-    display.setFont(&FreeMono9pt7b);
-    display.setCursor(30, 195);
+    display.setCursor(display.width() - 150, 25);
     display.print(currentData.weather.location);
   }
   
-  // Separator line
-  display.drawLine(20, 220, display.width()-20, 220, GxEPD_BLACK);
+  // Header separator line
+  display.drawLine(20, 35, display.width()-20, 35, GxEPD_BLACK);
 }
 
-void drawCalendarSection() {
-  display.setFont(&FreeMonoBold9pt7b);
-  display.setCursor(30, 260);
-  display.print("Termine:");
+void drawModernWeatherCards() {
+  int cardWidth = (display.width() - 60) / 3;  // 3 cards with spacing
+  int cardHeight = 140;
+  int startY = 55;
   
-  int yPos = 290;
+  // Current Weather Card (Left)
+  drawWeatherCard(20, startY, cardWidth, cardHeight, "CURRENT", 
+                  currentData.weather.current_temperature, 
+                  currentData.weather.current_description,
+                  currentData.weather.weather_icon, true);
+  
+  // Today Forecast Card (Center)
+  char todayTemp[20];
+  sprintf(todayTemp, "%.0f-%.0f°C", currentData.weather.today_min, currentData.weather.today_max);
+  drawWeatherCard(40 + cardWidth, startY, cardWidth, cardHeight, "TODAY", 
+                  (currentData.weather.today_min + currentData.weather.today_max) / 2, 
+                  currentData.weather.today_description,
+                  "", false);
+  
+  // Tomorrow Forecast Card (Right) - if available
+  if (currentData.weather.has_tomorrow_data) {
+    char tomorrowTemp[20];
+    sprintf(tomorrowTemp, "%.0f-%.0f°C", currentData.weather.tomorrow_min, currentData.weather.tomorrow_max);
+    drawWeatherCard(60 + (cardWidth * 2), startY, cardWidth, cardHeight, "TOMORROW", 
+                    (currentData.weather.tomorrow_min + currentData.weather.tomorrow_max) / 2, 
+                    currentData.weather.tomorrow_description,
+                    "", false);
+  } else {
+    // No tomorrow data - draw a simple info card
+    drawInfoCard(60 + (cardWidth * 2), startY, cardWidth, cardHeight, "TOMORROW", "No forecast");
+  }
+  
+  // Weather details bar below cards
+  drawWeatherDetailsBar(20, startY + cardHeight + 15);
+}
+
+void drawWeatherCard(int x, int y, int width, int height, const char* title, 
+                     float temperature, const char* description, const char* icon, bool showIcon) {
+  // Card border
+  display.drawRect(x, y, width, height, GxEPD_BLACK);
+  display.drawRect(x+1, y+1, width-2, height-2, GxEPD_BLACK);  // Double border
+  
+  // Title
+  display.setFont(&FreeMono9pt7b);
+  int titleX = x + (width / 2) - (strlen(title) * 6 / 2);
+  display.setCursor(titleX, y + 20);
+  display.print(title);
+  
+  // Weather icon (ASCII art for current weather)
+  if (showIcon && strlen(icon) > 0) {
+    drawWeatherIcon(x + width/2 - 15, y + 35, icon);
+  }
+  
+  // Temperature - large and prominent
+  display.setFont(&FreeMonoBold12pt7b);
+  char tempStr[10];
+  sprintf(tempStr, "%.0f°C", temperature);
+  int tempX = x + (width / 2) - (strlen(tempStr) * 8 / 2);
+  display.setCursor(tempX, y + (showIcon ? 80 : 60));
+  display.print(tempStr);
+  
+  // Description - wrapped text
+  display.setFont(&FreeMono9pt7b);
+  String desc = String(description);
+  if (desc.length() > 12) {
+    desc = desc.substring(0, 10) + "..";
+  }
+  int descX = x + (width / 2) - (desc.length() * 5 / 2);
+  display.setCursor(descX, y + height - 20);
+  display.print(desc);
+}
+
+void drawInfoCard(int x, int y, int width, int height, const char* title, const char* info) {
+  // Simple info card
+  display.drawRect(x, y, width, height, GxEPD_BLACK);
+  
+  // Title
+  display.setFont(&FreeMono9pt7b);
+  int titleX = x + (width / 2) - (strlen(title) * 6 / 2);
+  display.setCursor(titleX, y + 20);
+  display.print(title);
+  
+  // Info text
+  display.setFont(&FreeMono9pt7b);
+  int infoX = x + (width / 2) - (strlen(info) * 6 / 2);
+  display.setCursor(infoX, y + height/2 + 5);
+  display.print(info);
+}
+
+void drawWeatherDetailsBar(int x, int y) {
+  // Weather details in a horizontal bar
+  int barWidth = display.width() - 40;
+  int barHeight = 25;
+  
+  display.drawRect(x, y, barWidth, barHeight, GxEPD_BLACK);
+  
   display.setFont(&FreeMono9pt7b);
   
+  // Humidity
+  if (currentData.weather.humidity > 0) {
+    display.setCursor(x + 10, y + 18);
+    display.printf("H:%d%%", currentData.weather.humidity);
+  }
+  
+  // Wind speed
+  if (currentData.weather.wind_speed > 0) {
+    display.setCursor(x + 80, y + 18);
+    display.printf("W:%.1fm/s", currentData.weather.wind_speed);
+  }
+  
+  // Update time
+  time_t updateTime = currentData.weather.timestamp;
+  struct tm* timeInfo = localtime(&updateTime);
+  display.setCursor(x + barWidth - 100, y + 18);
+  display.printf("Up:%02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);
+}
+
+void drawWeatherIcon(int x, int y, const char* iconCode) {
+  // Simple ASCII weather icons based on OpenWeatherMap icon codes
+  display.setFont(&FreeMonoBold9pt7b);
+  
+  if (strncmp(iconCode, "01", 2) == 0) {  // Clear sky
+    display.setCursor(x, y);
+    display.print("  O  ");
+    display.setCursor(x, y + 15);
+    display.print(" \\|/ ");
+  } else if (strncmp(iconCode, "02", 2) == 0 || strncmp(iconCode, "03", 2) == 0) {  // Few/scattered clouds
+    display.setCursor(x, y);
+    display.print(" ___ ");
+    display.setCursor(x, y + 15);
+    display.print("(   )");
+  } else if (strncmp(iconCode, "04", 2) == 0) {  // Broken clouds
+    display.setCursor(x, y);
+    display.print("_____");
+    display.setCursor(x, y + 15);
+    display.print("(___)");
+  } else if (strncmp(iconCode, "09", 2) == 0 || strncmp(iconCode, "10", 2) == 0) {  // Rain
+    display.setCursor(x, y);
+    display.print(" ___ ");
+    display.setCursor(x, y + 15);
+    display.print("(::)");
+  } else if (strncmp(iconCode, "11", 2) == 0) {  // Thunderstorm
+    display.setCursor(x, y);
+    display.print(" ___ ");
+    display.setCursor(x, y + 15);
+    display.print("(*#*)");
+  } else if (strncmp(iconCode, "13", 2) == 0) {  // Snow
+    display.setCursor(x, y);
+    display.print(" ___ ");
+    display.setCursor(x, y + 15);
+    display.print("(***)");
+  } else {  // Default
+    display.setCursor(x, y);
+    display.print(" ??? ");
+  }
+}
+
+void drawModernEventsTimeline() {
+  int timelineX = 40;
+  int timelineStartY = 220;
+  int timelineWidth = display.width() - 80;
+  int eventCardWidth = timelineWidth - 40;
+  
+  // Events section header
+  display.setFont(&FreeMonoBold12pt7b);
+  display.setCursor(20, timelineStartY);
+  display.print("EVENTS");
+  
+  int currentY = timelineStartY + 25;
+  
   if (currentData.event_count == 0) {
-    display.setCursor(30, yPos);
-    display.print("Keine Termine");
+    drawNoEventsCard(timelineX, currentY, eventCardWidth);
     return;
   }
   
-  for (int i = 0; i < currentData.event_count && i < 8; i++) {  // Increased to 8 events for portrait
-    if (yPos > display.height() - 80) break;  // More space in portrait mode
+  // Draw timeline events
+  for (int i = 0; i < currentData.event_count && i < 4; i++) {  // Show max 4 events in timeline
+    if (currentY > display.height() - 60) break;
     
     CalendarEvent& event = currentData.events[i];
     if (!event.valid) continue;
     
-    // Event title (adjust for narrower width in portrait)
-    String eventTitle = String(event.title);
-    if (eventTitle.length() > 28) {  // Reduced for narrower display
-      eventTitle = eventTitle.substring(0, 25) + "...";
-    }
-    
-    display.setCursor(30, yPos);
-    display.print("• " + eventTitle);
-    yPos += 25;
-    
-    // Event time and location
-    if (event.start_time > 0) {
-      time_t eventTime = event.start_time;
-      struct tm* timeInfo = localtime(&eventTime);
-      
-      display.setCursor(40, yPos);
-      display.printf("%02d.%02d %02d:%02d", 
-                    timeInfo->tm_mon + 1, timeInfo->tm_mday,
-                    timeInfo->tm_hour, timeInfo->tm_min);
-      
-      // Location on separate line if it exists
-      if (strlen(event.location) > 0) {
-        yPos += 20;
-        display.setCursor(40, yPos);
-        String loc = String(event.location);
-        if (loc.length() > 35) {
-          loc = loc.substring(0, 32) + "...";
-        }
-        display.printf("@ %s", loc.c_str());
-      }
-      yPos += 25;
-    }
-    
-    yPos += 10;  // Gap between events
+    drawEventTimelineCard(timelineX, currentY, eventCardWidth, event);
+    currentY += 50;  // Space between event cards
+  }
+  
+  // If more events, show count
+  if (currentData.event_count > 4) {
+    display.setFont(&FreeMono9pt7b);
+    display.setCursor(timelineX, currentY);
+    display.printf("+ %d more events...", currentData.event_count - 4);
   }
 }
 
-void drawFooter() {
+void drawEventTimelineCard(int x, int y, int width, CalendarEvent& event) {
+  int cardHeight = 40;
+  
+  // Event card background
+  display.drawRect(x, y, width, cardHeight, GxEPD_BLACK);
+  
+  // Time indicator (left side)
+  if (event.start_time > 0) {
+    time_t eventTime = event.start_time;
+    struct tm* timeInfo = localtime(&eventTime);
+    
+    // Time box
+    display.fillRect(x + 2, y + 2, 50, cardHeight - 4, GxEPD_BLACK);
+    display.setTextColor(GxEPD_WHITE);
+    display.setFont(&FreeMono9pt7b);
+    
+    // Time
+    display.setCursor(x + 6, y + 15);
+    display.printf("%02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);
+    
+    // Date (if different from today)
+    time_t now = currentData.timestamp;
+    struct tm* nowInfo = localtime(&now);
+    if (timeInfo->tm_mday != nowInfo->tm_mday || timeInfo->tm_mon != nowInfo->tm_mon) {
+      display.setCursor(x + 6, y + 30);
+      display.printf("%02d.%02d", timeInfo->tm_mday, timeInfo->tm_mon + 1);
+    }
+    
+    display.setTextColor(GxEPD_BLACK);  // Reset to black
+  }
+  
+  // Event title and location (right side)
+  display.setFont(&FreeMonoBold9pt7b);
+  
+  // Event title
+  String eventTitle = String(event.title);
+  if (eventTitle.length() > 25) {
+    eventTitle = eventTitle.substring(0, 22) + "..";
+  }
+  
+  display.setCursor(x + 60, y + 15);
+  display.print(eventTitle);
+  
+  // Location (if exists)
+  if (strlen(event.location) > 0) {
+    display.setFont(&FreeMono9pt7b);
+    String location = String(event.location);
+    if (location.length() > 30) {
+      location = location.substring(0, 27) + "..";
+    }
+    display.setCursor(x + 60, y + 30);
+    display.printf("@ %s", location.c_str());
+  }
+}
+
+void drawNoEventsCard(int x, int y, int width) {
+  int cardHeight = 40;
+  
+  display.drawRect(x, y, width, cardHeight, GxEPD_BLACK);
+  
+  display.setFont(&FreeMono9pt7b);
+  display.setCursor(x + width/2 - 60, y + 25);
+  display.print("No events today");
+}
+
+void drawModernFooter() {
   if (!displayInitialized) return;
   
-  // Draw bottom border
-  display.drawLine(20, display.height()-50, display.width()-20, display.height()-50, GxEPD_BLACK);
+  int footerY = display.height() - 30;
   
-  // Last update timestamp - centered in portrait
+  // Modern status bar
+  display.drawLine(20, footerY - 10, display.width()-20, footerY - 10, GxEPD_BLACK);
+  
   display.setFont(&FreeMono9pt7b);
-  display.setCursor(30, display.height()-25);
   
-  time_t now = currentData.timestamp;
-  struct tm* timeInfo = localtime(&now);
-  display.printf("Aktualisiert: %02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);
+  // Connection status
+  display.setCursor(20, footerY);
+  display.print("ESP32");
   
-  // ESP32 status - positioned for narrower display
-  display.setCursor(display.width()-50, display.height()-25);
-  display.print("<3");
+  // Data hash (for debugging)
+  display.setCursor(80, footerY);
+  display.printf("#%s", currentData.received_hash);
+  
+  // Event count
+  display.setCursor(160, footerY);
+  display.printf("%d events", currentData.event_count);
+  
+  // Skipped updates counter
+  display.setCursor(240, footerY);
+  display.printf("Skip:%u", skippedUpdates);
+  
+  // System status
+  display.setCursor(display.width()-60, footerY);
+  display.print("ONLINE");
 }
