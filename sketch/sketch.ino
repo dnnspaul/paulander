@@ -489,6 +489,12 @@ void showStartupMessage() {
   display.setCursor(50, 180);
   display.print("Waiting for data from Raspberry Pi...");
 
+  display.setCursor(50, 240);
+  display.print("This shouldn't take longer");
+
+  display.setCursor(50, 270);
+  display.print("than 30 minutes!");
+
   // Draw border
   display.drawRect(20, 20, display.width() - 40, display.height() - 40, GxEPD_BLACK);
 
