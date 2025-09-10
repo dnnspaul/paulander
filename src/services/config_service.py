@@ -12,7 +12,6 @@ class ConfigService:
             'weather_location': 'Berlin',
             'openweather_api_key': os.getenv('OPENWEATHER_API_KEY', ''),
             'gemini_api_key': os.getenv('GEMINI_API_KEY', ''),
-            'display_refresh_interval': 1800,  # 30 minutes in seconds
             'color_display_refresh_time': '06:00',
             'ai_prompt_template': '''I want you to write a detailed prompt for an AI to generate a modern painting that is being shown on an 7.3" e-ink display that supports 6 colors (black, white, red, green, blue, yellow) with a resolution of 800x480. The generated image should reflect today.
 
