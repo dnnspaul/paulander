@@ -220,6 +220,11 @@ class DisplayService:
             image = self.generate_daily_image()
             print(f"✓ Image generated: {image.size[0]}x{image.size[1]} pixels, mode: {image.mode}")
             
+            # Rotate image by 180 degrees for display orientation
+            print("Rotating image 180 degrees...")
+            image = image.rotate(180)
+            print(f"✓ Image rotated: {image.size[0]}x{image.size[1]} pixels, mode: {image.mode}")
+            
             # Ensure display is loaded before using it
             if not self.color_epd:
                 self._ensure_display_loaded()
