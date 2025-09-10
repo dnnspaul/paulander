@@ -403,8 +403,7 @@ class DisplayService:
                 'tomorrow_max': weather.get('tomorrow_max'),
                 'tomorrow_description': weather.get('tomorrow_description', 'N/A')[:63] if weather.get('tomorrow_description') else None,
                 'location': weather.get('location', '')[:31],  # Limit to 31 chars
-                # Enhanced data for modern display
-                'weather_icon': current_weather.get('icon', '')[:7],  # OpenWeatherMap icon code
+                # Enhanced data for modern display (no icons)
                 'humidity': int(current_weather.get('humidity', 0)),
                 'wind_speed': float(current_weather.get('wind_speed', 0.0)),
                 'timestamp': int(time.time())
@@ -414,7 +413,7 @@ class DisplayService:
             print(f"  Today: {self.cached_weather_data['today_min']}-{self.cached_weather_data['today_max']}°C, {self.cached_weather_data['today_description']}")
             if self.cached_weather_data['tomorrow_min'] is not None:
                 print(f"  Tomorrow: {self.cached_weather_data['tomorrow_min']}-{self.cached_weather_data['tomorrow_max']}°C, {self.cached_weather_data['tomorrow_description']}")
-            print(f"  Modern data: Icon={self.cached_weather_data.get('weather_icon', 'N/A')}, Humidity={self.cached_weather_data.get('humidity', 0)}%, Wind={self.cached_weather_data.get('wind_speed', 0)}m/s")
+            print(f"  Modern data: Humidity={self.cached_weather_data.get('humidity', 0)}%, Wind={self.cached_weather_data.get('wind_speed', 0)}m/s")
             
             # Fetch calendar data
             print("Fetching calendar events...")
@@ -563,7 +562,7 @@ class DisplayService:
         """Prepare JSON data for ESP32 communication"""
         print(f"Preparing modern enhanced JSON data for ESP32")
         print(f"Weather - Current: {self.cached_weather_data['current_temperature']}°C, Today: {self.cached_weather_data['today_min']}-{self.cached_weather_data['today_max']}°C")
-        print(f"Modern data - Icon: {self.cached_weather_data.get('weather_icon', 'N/A')}, Humidity: {self.cached_weather_data.get('humidity', 0)}%, Wind: {self.cached_weather_data.get('wind_speed', 0)}m/s")
+        print(f"Modern data - Humidity: {self.cached_weather_data.get('humidity', 0)}%, Wind: {self.cached_weather_data.get('wind_speed', 0)}m/s")
         
         # Prepare events data - only send the events we have
         events_data = []
@@ -588,8 +587,7 @@ class DisplayService:
                 "tomorrow_max": float(self.cached_weather_data['tomorrow_max']) if self.cached_weather_data['tomorrow_max'] is not None else None,
                 "tomorrow_description": self._sanitize_text_for_display(self.cached_weather_data['tomorrow_description'])[:63] if self.cached_weather_data['tomorrow_description'] else None,
                 "location": self._sanitize_text_for_display(self.cached_weather_data['location'])[:31],
-                # Enhanced modern display data
-                "weather_icon": self.cached_weather_data.get('weather_icon', '')[:7],
+                # Enhanced modern display data (no icons)
                 "humidity": int(self.cached_weather_data.get('humidity', 0)),
                 "wind_speed": float(self.cached_weather_data.get('wind_speed', 0.0)),
                 "timestamp": self.cached_weather_data['timestamp']
