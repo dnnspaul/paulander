@@ -788,20 +788,18 @@ class DisplayService:
         
         events_text = "\n".join([f"- {event}" for event in event_texts]) if event_texts else "- No events scheduled"
         
-        # Create the prompt generation request
-        prompt_request = f"""I want you to write a detailed prompt for an AI to generate a modern painting that is being shown on an 7.3" e-ink display that supports 6 colors (black, white, red, green, blue, yellow) with a resolution of 800x480. The generated image should reflect today.
-
-*Todays information*
-Date: {today_date}
-Weather: {weather_summary}
-Calendar events:
-{events_text}
-
-ONLY RETURN YOUR PROMPT SUGGESTION, WITHOUT ANYTHING ELSE (DISMISS SOMETHING LIKE `Here's your prompt`).
-**Never** mention the e-ink display, because it will result in an e-ink display being rendered. Also make sure, that an artistic painting is generated instead of anything that looks like an info screen.
-Always generate a single picture and never split it into multiple images. Try to combine every occassion that the calendar, the weather and the date has to offer into a single image.
-
-Make it vintage-poster style. Let it only generate an image without any text that is drawn onto the image like title, date or something like that."""
+        # Get the configurable prompt template from config
+        prompt_template = self.config_service.get('ai_prompt_template')
+        if not prompt_template:
+            # Fallback to default template if not configured
+            prompt_template = self.config_service.default_config['ai_prompt_template']
+        
+        # Replace variables in the template
+        prompt_request = prompt_template.format(
+            today_date=today_date,
+            weather_summary=weather_summary,
+            events_text=events_text
+        )
         
         return prompt_request
     

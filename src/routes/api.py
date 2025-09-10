@@ -32,6 +32,14 @@ def update_config():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@api_bp.route('/config/default-prompt', methods=['GET'])
+def get_default_prompt():
+    """Get default AI prompt template"""
+    try:
+        return jsonify({'ai_prompt_template': config_service.default_config['ai_prompt_template']})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @api_bp.route('/calendar/test', methods=['POST'])
 def test_calendar():
     """Test calendar connection"""
