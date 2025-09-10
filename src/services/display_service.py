@@ -799,9 +799,9 @@ Calendar events:
 
 ONLY RETURN YOUR PROMPT SUGGESTION, WITHOUT ANYTHING ELSE (DISMISS SOMETHING LIKE `Here's your prompt`).
 **Never** mention the e-ink display, because it will result in an e-ink display being rendered. Also make sure, that an artistic painting is generated instead of anything that looks like an info screen.
-Just in case you want to make separate images, make columns instead of rows - so split it vertically.
+Always generate a single picture and never split it into multiple images. Try to combine every occassion that the calendar, the weather and the date has to offer into a single image.
 
-Make it vintage-poster style. Let it only generate an image without any title, date or something like that on the image."""
+Make it vintage-poster style. Let it only generate an image without any text that is drawn onto the image like title, date or something like that."""
         
         return prompt_request
     
