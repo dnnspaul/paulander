@@ -542,10 +542,10 @@ void updateDisplay() {
 }
 
 void drawModernHeader() {
-  // Modern header bar with date and location
+  // Modern header bar with date and location (NO TIME due to 30min updates)
   display.setFont(&FreeMonoBold9pt7b);
   
-  // Get current time for header
+  // Get current time for date only
   time_t now = currentData.timestamp;
   struct tm* timeInfo = localtime(&now);
   
@@ -553,15 +553,17 @@ void drawModernHeader() {
   display.setCursor(20, 25);
   display.printf("%02d.%02d.%d", timeInfo->tm_mday, timeInfo->tm_mon + 1, timeInfo->tm_year + 1900);
   
-  // Time in center
-  display.setCursor(150, 25);
-  display.printf("%02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);
-  
-  // Location on right (if available)
+  // Location in center (if available)
   if (strlen(currentData.weather.location) > 0) {
-    display.setCursor(display.width() - 150, 25);
+    int locationWidth = strlen(currentData.weather.location) * 12; // Rough width estimation
+    int centerX = (display.width() / 2) - (locationWidth / 2);
+    display.setCursor(centerX, 25);
     display.print(currentData.weather.location);
   }
+  
+  // System status on right
+  display.setCursor(display.width() - 100, 25);
+  display.print("PAULANDER");
   
   // Header separator line
   display.drawLine(20, 35, display.width()-20, 35, GxEPD_BLACK);
@@ -569,8 +571,8 @@ void drawModernHeader() {
 
 void drawModernWeatherCards() {
   int cardWidth = (display.width() - 60) / 3;  // 3 cards with spacing
-  int cardHeight = 140;
-  int startY = 55;
+  int cardHeight = 130;  // Reduced height to prevent overlaps
+  int startY = 45;       // Start earlier for better spacing
   
   // Current Weather Card (Left)
   drawWeatherCard(20, startY, cardWidth, cardHeight, "CURRENT", 
@@ -599,8 +601,8 @@ void drawModernWeatherCards() {
     drawInfoCard(60 + (cardWidth * 2), startY, cardWidth, cardHeight, "TOMORROW", "No forecast");
   }
   
-  // Weather details bar below cards
-  drawWeatherDetailsBar(20, startY + cardHeight + 15);
+  // Weather details bar below cards with proper spacing
+  drawWeatherDetailsBar(20, startY + cardHeight + 10);  // 185px position
 }
 
 void drawWeatherCard(int x, int y, int width, int height, const char* title, 
@@ -609,9 +611,10 @@ void drawWeatherCard(int x, int y, int width, int height, const char* title,
   display.drawRect(x, y, width, height, GxEPD_BLACK);
   display.drawRect(x+1, y+1, width-2, height-2, GxEPD_BLACK);  // Double border
   
-  // Title
+  // Title - properly centered
   display.setFont(&FreeMono9pt7b);
-  int titleX = x + (width / 2) - (strlen(title) * 6 / 2);
+  int titleWidth = strlen(title) * 10;  // More accurate width calculation
+  int titleX = x + (width / 2) - (titleWidth / 2);
   display.setCursor(titleX, y + 20);
   display.print(title);
   
@@ -643,9 +646,10 @@ void drawInfoCard(int x, int y, int width, int height, const char* title, const 
   // Simple info card
   display.drawRect(x, y, width, height, GxEPD_BLACK);
   
-  // Title
+  // Title - properly centered
   display.setFont(&FreeMono9pt7b);
-  int titleX = x + (width / 2) - (strlen(title) * 6 / 2);
+  int titleWidth = strlen(title) * 10;  // More accurate width calculation
+  int titleX = x + (width / 2) - (titleWidth / 2);
   display.setCursor(titleX, y + 20);
   display.print(title);
   
@@ -677,11 +681,16 @@ void drawWeatherDetailsBar(int x, int y) {
     display.printf("W:%.1fm/s", currentData.weather.wind_speed);
   }
   
-  // Update time
+  // Data age indicator instead of time
+  time_t now = currentData.timestamp;
   time_t updateTime = currentData.weather.timestamp;
-  struct tm* timeInfo = localtime(&updateTime);
+  int ageMinutes = (now - updateTime) / 60;
   display.setCursor(x + barWidth - 100, y + 18);
-  display.printf("Up:%02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);
+  if (ageMinutes < 60) {
+    display.printf("%dm ago", ageMinutes);
+  } else {
+    display.printf("%dh ago", ageMinutes / 60);
+  }
 }
 
 void drawWeatherIcon(int x, int y, const char* iconCode) {
@@ -726,7 +735,7 @@ void drawWeatherIcon(int x, int y, const char* iconCode) {
 
 void drawModernEventsTimeline() {
   int timelineX = 40;
-  int timelineStartY = 220;
+  int timelineStartY = 230;  // More spacing from humidity bar (185+25+20=230)
   int timelineWidth = display.width() - 80;
   int eventCardWidth = timelineWidth - 40;
   
@@ -743,7 +752,7 @@ void drawModernEventsTimeline() {
   }
   
   // Draw timeline events
-  for (int i = 0; i < currentData.event_count && i < 4; i++) {  // Show max 4 events in timeline
+  for (int i = 0; i < currentData.event_count && i < 8; i++) {  // Show max 8 events in timeline
     if (currentY > display.height() - 60) break;
     
     CalendarEvent& event = currentData.events[i];
@@ -754,10 +763,10 @@ void drawModernEventsTimeline() {
   }
   
   // If more events, show count
-  if (currentData.event_count > 4) {
+  if (currentData.event_count > 8) {
     display.setFont(&FreeMono9pt7b);
     display.setCursor(timelineX, currentY);
-    display.printf("+ %d more events...", currentData.event_count - 4);
+    display.printf("+ %d more events...", currentData.event_count - 8);
   }
 }
 
@@ -840,17 +849,15 @@ void drawModernFooter() {
   display.setCursor(20, footerY);
   display.print("ESP32");
   
-  // Data hash (for debugging)
-  display.setCursor(80, footerY);
-  display.printf("#%s", currentData.received_hash);
-  
   // Event count
-  display.setCursor(160, footerY);
+  display.setCursor(80, footerY);
   display.printf("%d events", currentData.event_count);
   
-  // Skipped updates counter
-  display.setCursor(240, footerY);
-  display.printf("Skip:%u", skippedUpdates);
+  // Last update time (weather timestamp - this is OK since it's not current time)
+  time_t updateTime = currentData.weather.timestamp;
+  struct tm* timeInfo = localtime(&updateTime);
+  display.setCursor(180, footerY);
+  display.printf("Updated:%02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);
   
   // System status
   display.setCursor(display.width()-60, footerY);
