@@ -111,6 +111,27 @@
                             <p class="mt-1 text-xs text-gray-500">Daily refresh time for the color display</p>
                         </div>
                     </div>
+                    
+                    <!-- System Control Buttons -->
+                    <div class="mt-6 pt-4 border-t border-gray-100">
+                        <h5 class="text-md font-medium text-gray-900 mb-3">
+                            <i class="fas fa-power-off mr-2 text-red-500"></i>
+                            System Control
+                        </h5>
+                        <div class="flex gap-3">
+                            <button type="button" @click="confirmAction('restart')" :disabled="systemActionInProgress"
+                                    class="inline-flex items-center px-4 py-2 border border-orange-300 shadow-sm text-sm font-medium rounded-md text-orange-700 bg-orange-50 hover:bg-orange-100 disabled:opacity-50">
+                                <i class="fas fa-redo mr-2"></i>
+                                Restart Device
+                            </button>
+                            <button type="button" @click="confirmAction('shutdown')" :disabled="systemActionInProgress"
+                                    class="inline-flex items-center px-4 py-2 border border-red-300 shadow-sm text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50">
+                                <i class="fas fa-power-off mr-2"></i>
+                                Shutdown Device
+                            </button>
+                        </div>
+                        <p class="mt-2 text-xs text-gray-500">These actions require sudo permissions and will immediately affect the device</p>
+                    </div>
                 </div>
                 
                 <!-- AI Settings -->
@@ -192,6 +213,7 @@ createApp({
             showPassword: false,
             testing: false,
             saving: false,
+            systemActionInProgress: false,
             message: {
                 text: '',
                 type: ''
@@ -262,6 +284,34 @@ createApp({
             } catch (error) {
                 console.error('Error resetting prompt template:', error);
                 this.showMessage('Error resetting prompt template', 'error');
+            }
+        },
+        
+        confirmAction(action) {
+            const actionText = action === 'restart' ? 'restart' : 'shut down';
+            const message = `Are you sure you want to ${actionText} the device? This action cannot be undone and will immediately affect the system.`;
+            
+            if (confirm(message)) {
+                this.executeSystemAction(action);
+            }
+        },
+        
+        async executeSystemAction(action) {
+            this.systemActionInProgress = true;
+            
+            try {
+                const endpoint = action === 'restart' ? '/api/system/restart' : '/api/system/shutdown';
+                const response = await axios.post(endpoint);
+                
+                if (action === 'restart') {
+                    this.showMessage('Device restart initiated. The system will be back online shortly.', 'success');
+                } else {
+                    this.showMessage('Device shutdown initiated. You can now safely disconnect power.', 'success');
+                }
+            } catch (error) {
+                console.error(`Error executing ${action}:`, error);
+                this.showMessage(`Error executing ${action}. Please try again or check system permissions.`, 'error');
+                this.systemActionInProgress = false;
             }
         }
     },

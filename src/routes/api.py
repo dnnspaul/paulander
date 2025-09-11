@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify
 from PIL import Image, ImageDraw
 from datetime import datetime
+import subprocess
+import os
 from src.services.calendar_service import CalendarService
 from src.services.weather_service import WeatherService
 from src.services.config_service import ConfigService
@@ -96,5 +98,23 @@ def get_display_status():
     try:
         status = display_service.get_status()
         return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/system/shutdown', methods=['POST'])
+def shutdown_device():
+    """Shutdown the Raspberry Pi"""
+    try:
+        subprocess.Popen(['sudo', 'shutdown', '-h', 'now'])
+        return jsonify({'message': 'Shutdown initiated successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/system/restart', methods=['POST'])
+def restart_device():
+    """Restart the Raspberry Pi"""
+    try:
+        subprocess.Popen(['sudo', 'reboot'])
+        return jsonify({'message': 'Restart initiated successfully'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
