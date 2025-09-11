@@ -541,40 +541,36 @@ void updateDisplay() {
 }
 
 void drawModernHeader() {
-  // Modern header bar with date and location (NO TIME due to 30min updates)
+  // Clean modern header with centered date only
   display.setFont(&FreeMonoBold9pt7b);
   
   // Get current time for date only
   time_t now = currentData.timestamp;
   struct tm* timeInfo = localtime(&now);
   
-  // Date on left
-  display.setCursor(20, 25);
-  display.printf("%02d.%02d.%d", timeInfo->tm_mday, timeInfo->tm_mon + 1, timeInfo->tm_year + 1900);
+  // Date centered in header
+  char dateText[12];
+  sprintf(dateText, "%02d.%02d.%d", timeInfo->tm_mday, timeInfo->tm_mon + 1, timeInfo->tm_year + 1900);
+  int dateWidth = strlen(dateText) * 12;  // Accurate width calculation for bold font
+  int centerX = (display.width() / 2) - (dateWidth / 2);
+  display.setCursor(centerX, 25);
+  display.print(dateText);
   
-  // Location in center (if available)
-  if (strlen(currentData.weather.location) > 0) {
-    int locationWidth = strlen(currentData.weather.location) * 12; // Rough width estimation
-    int centerX = (display.width() / 2) - (locationWidth / 2);
-    display.setCursor(centerX, 25);
-    display.print(currentData.weather.location);
-  }
-  
-  // System status on right
-  display.setCursor(display.width() - 100, 25);
-  display.print("PAULANDER");
-  
-  // Header separator line
-  display.drawLine(20, 35, display.width()-20, 35, GxEPD_BLACK);
+  // Header separator line - consistent width
+  display.drawLine(30, 35, display.width()-30, 35, GxEPD_BLACK);
 }
 
 void drawModernWeatherCards() {
-  int cardWidth = (display.width() - 60) / 3;  // 3 cards with spacing
+  // Consistent margins with other elements
+  int marginLeft = 30;
+  int marginRight = 30;
+  int totalWidth = display.width() - marginLeft - marginRight;
+  int cardWidth = (totalWidth - 40) / 3;  // 3 cards with 20px spacing between them
   int cardHeight = 130;  // Reduced height to prevent overlaps
   int startY = 45;       // Start earlier for better spacing
   
   // Current Weather Card (Left)
-  drawWeatherCard(20, startY, cardWidth, cardHeight, "CURRENT", 
+  drawWeatherCard(marginLeft, startY, cardWidth, cardHeight, "CURRENT", 
                   currentData.weather.current_temperature, 
                   currentData.weather.current_description,
                   "", false);  // No icons
@@ -582,7 +578,7 @@ void drawModernWeatherCards() {
   // Today Forecast Card (Center)
   char todayTemp[20];
   sprintf(todayTemp, "%.0f-%.0f°C", currentData.weather.today_min, currentData.weather.today_max);
-  drawWeatherCard(40 + cardWidth, startY, cardWidth, cardHeight, "TODAY", 
+  drawWeatherCard(marginLeft + cardWidth + 20, startY, cardWidth, cardHeight, "TODAY", 
                   (currentData.weather.today_min + currentData.weather.today_max) / 2, 
                   currentData.weather.today_description,
                   "", false);
@@ -591,17 +587,17 @@ void drawModernWeatherCards() {
   if (currentData.weather.has_tomorrow_data) {
     char tomorrowTemp[20];
     sprintf(tomorrowTemp, "%.0f-%.0f°C", currentData.weather.tomorrow_min, currentData.weather.tomorrow_max);
-    drawWeatherCard(60 + (cardWidth * 2), startY, cardWidth, cardHeight, "TOMORROW", 
+    drawWeatherCard(marginLeft + (cardWidth * 2) + 40, startY, cardWidth, cardHeight, "TOMORROW", 
                     (currentData.weather.tomorrow_min + currentData.weather.tomorrow_max) / 2, 
                     currentData.weather.tomorrow_description,
                     "", false);
   } else {
     // No tomorrow data - draw a simple info card
-    drawInfoCard(60 + (cardWidth * 2), startY, cardWidth, cardHeight, "TOMORROW", "No forecast");
+    drawInfoCard(marginLeft + (cardWidth * 2) + 40, startY, cardWidth, cardHeight, "TOMORROW", "No forecast");
   }
   
-  // Weather details bar below cards with proper spacing
-  drawWeatherDetailsBar(20, startY + cardHeight + 10);  // 185px position
+  // Weather details bar below cards with consistent width
+  drawWeatherDetailsBar(marginLeft, startY + cardHeight + 10);  // 185px position
 }
 
 void drawWeatherCard(int x, int y, int width, int height, const char* title, 
@@ -612,7 +608,7 @@ void drawWeatherCard(int x, int y, int width, int height, const char* title,
   
   // Title - properly centered
   display.setFont(&FreeMono9pt7b);
-  int titleWidth = strlen(title) * 10;  // More accurate width calculation
+  int titleWidth = strlen(title) * (10 * 1.1);  // More accurate width calculation
   int titleX = x + (width / 2) - (titleWidth / 2);
   display.setCursor(titleX, y + 20);
   display.print(title);
@@ -656,8 +652,8 @@ void drawInfoCard(int x, int y, int width, int height, const char* title, const 
 }
 
 void drawWeatherDetailsBar(int x, int y) {
-  // Weather details in a horizontal bar
-  int barWidth = display.width() - 40;
+  // Weather details in a horizontal bar - consistent width with other elements
+  int barWidth = display.width() - 60;  // Same margins as header and footer (30px each side)
   int barHeight = 25;
   
   display.drawRect(x, y, barWidth, barHeight, GxEPD_BLACK);
@@ -690,20 +686,21 @@ void drawWeatherDetailsBar(int x, int y) {
 
 
 void drawModernEventsTimeline() {
-  int timelineX = 40;
-  int timelineStartY = 230;  // More spacing from humidity bar (185+25+20=230)
-  int timelineWidth = display.width() - 80;
-  int eventCardWidth = timelineWidth - 40;
+  // Consistent margins with other elements
+  int marginLeft = 30;
+  int timelineStartY = 270;  // More spacing from humidity bar (185+25+60=250)
+  int timelineWidth = display.width() - 60;  // Same margins as other elements (30px each side)
+  int eventCardWidth = timelineWidth;
   
   // Events section header
   display.setFont(&FreeMonoBold12pt7b);
-  display.setCursor(20, timelineStartY);
+  display.setCursor(marginLeft, timelineStartY);
   display.print("EVENTS");
   
   int currentY = timelineStartY + 25;
   
   if (currentData.event_count == 0) {
-    drawNoEventsCard(timelineX, currentY, eventCardWidth);
+    drawNoEventsCard(marginLeft, currentY, eventCardWidth);
     return;
   }
   
@@ -714,14 +711,14 @@ void drawModernEventsTimeline() {
     CalendarEvent& event = currentData.events[i];
     if (!event.valid) continue;
     
-    drawEventTimelineCard(timelineX, currentY, eventCardWidth, event);
+    drawEventTimelineCard(marginLeft, currentY, eventCardWidth, event);
     currentY += 50;  // Space between event cards
   }
   
   // If more events, show count
   if (currentData.event_count > 8) {
     display.setFont(&FreeMono9pt7b);
-    display.setCursor(timelineX, currentY);
+    display.setCursor(marginLeft, currentY);
     display.printf("+ %d more events...", currentData.event_count - 8);
   }
 }
@@ -796,28 +793,28 @@ void drawNoEventsCard(int x, int y, int width) {
 void drawModernFooter() {
   if (!displayInitialized) return;
   
-  int footerY = display.height() - 30;
+  int footerY = display.height() - 25;  // Move text up slightly
   
-  // Modern status bar
-  display.drawLine(20, footerY - 10, display.width()-20, footerY - 10, GxEPD_BLACK);
+  // Modern status bar with consistent width
+  display.drawLine(30, footerY - 20, display.width()-30, footerY - 20, GxEPD_BLACK);
   
   display.setFont(&FreeMono9pt7b);
   
   // Connection status
-  display.setCursor(20, footerY);
-  display.print("ESP32");
+  display.setCursor(30, footerY);
+  display.print("PAULANDER");
   
-  // Event count
-  display.setCursor(80, footerY);
-  display.printf("%d events", currentData.event_count);
-  
-  // Last update time (weather timestamp - this is OK since it's not current time)
+  // Last update time (weather timestamp - this is OK since it's not current time) - CENTERED
   time_t updateTime = currentData.weather.timestamp;
   struct tm* timeInfo = localtime(&updateTime);
-  display.setCursor(180, footerY);
-  display.printf("Updated:%02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);
+  char updateText[20];
+  sprintf(updateText, "Updated:%02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);
+  int updateWidth = strlen(updateText) * 10;  // Accurate width calculation
+  int centerX = (display.width() / 2) - (updateWidth / 2);
+  display.setCursor(centerX, footerY);
+  display.print(updateText);
   
   // System status
-  display.setCursor(display.width()-60, footerY);
-  display.print("ONLINE");
+  display.setCursor(display.width()-50, footerY);  // Adjusted for 30px margin
+  display.print("<3");
 }
