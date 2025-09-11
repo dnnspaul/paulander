@@ -548,7 +548,7 @@ void drawModernHeader() {
   time_t now = currentData.timestamp;
   struct tm* timeInfo = localtime(&now);
   
-  // Date centered in header
+  // Date centered in header (German format)
   char dateText[12];
   sprintf(dateText, "%02d.%02d.%d", timeInfo->tm_mday, timeInfo->tm_mon + 1, timeInfo->tm_year + 1900);
   int dateWidth = strlen(dateText) * 12;  // Accurate width calculation for bold font
@@ -569,31 +569,31 @@ void drawModernWeatherCards() {
   int cardHeight = 130;  // Reduced height to prevent overlaps
   int startY = 45;       // Start earlier for better spacing
   
-  // Current Weather Card (Left)
-  drawWeatherCard(marginLeft, startY, cardWidth, cardHeight, "CURRENT", 
+  // Current Weather Card (Left) - German labels
+  drawWeatherCard(marginLeft, startY, cardWidth, cardHeight, "JETZT", 
                   currentData.weather.current_temperature, 
                   currentData.weather.current_description,
                   "", false);  // No icons
   
-  // Today Forecast Card (Center)
+  // Today Forecast Card (Center) - German labels
   char todayTemp[20];
   sprintf(todayTemp, "%.0f-%.0f°C", currentData.weather.today_min, currentData.weather.today_max);
-  drawWeatherCard(marginLeft + cardWidth + 20, startY, cardWidth, cardHeight, "TODAY", 
+  drawWeatherCard(marginLeft + cardWidth + 20, startY, cardWidth, cardHeight, "HEUTE", 
                   (currentData.weather.today_min + currentData.weather.today_max) / 2, 
                   currentData.weather.today_description,
                   "", false);
   
-  // Tomorrow Forecast Card (Right) - if available
+  // Tomorrow Forecast Card (Right) - if available - German labels
   if (currentData.weather.has_tomorrow_data) {
     char tomorrowTemp[20];
     sprintf(tomorrowTemp, "%.0f-%.0f°C", currentData.weather.tomorrow_min, currentData.weather.tomorrow_max);
-    drawWeatherCard(marginLeft + (cardWidth * 2) + 40, startY, cardWidth, cardHeight, "TOMORROW", 
+    drawWeatherCard(marginLeft + (cardWidth * 2) + 40, startY, cardWidth, cardHeight, "MORGEN", 
                     (currentData.weather.tomorrow_min + currentData.weather.tomorrow_max) / 2, 
                     currentData.weather.tomorrow_description,
                     "", false);
   } else {
-    // No tomorrow data - draw a simple info card
-    drawInfoCard(marginLeft + (cardWidth * 2) + 40, startY, cardWidth, cardHeight, "TOMORROW", "No forecast");
+    // No tomorrow data - draw a simple info card - German text
+    drawInfoCard(marginLeft + (cardWidth * 2) + 40, startY, cardWidth, cardHeight, "MORGEN", "Keine Vorhersage");
   }
   
   // Weather details bar below cards with consistent width
@@ -660,27 +660,27 @@ void drawWeatherDetailsBar(int x, int y) {
   
   display.setFont(&FreeMono9pt7b);
   
-  // Humidity
+  // Humidity - German abbreviation
   if (currentData.weather.humidity > 0) {
     display.setCursor(x + 10, y + 18);
-    display.printf("H:%d%%", currentData.weather.humidity);
+    display.printf("F:%d%%", currentData.weather.humidity);  // F for "Feuchtigkeit"
   }
   
-  // Wind speed
+  // Wind speed - German abbreviation
   if (currentData.weather.wind_speed > 0) {
     display.setCursor(x + 80, y + 18);
-    display.printf("W:%.1fm/s", currentData.weather.wind_speed);
+    display.printf("W:%.1fm/s", currentData.weather.wind_speed);  // W for "Wind" (same in German)
   }
   
-  // Data age indicator instead of time
+  // Data age indicator instead of time - German text
   time_t now = currentData.timestamp;
   time_t updateTime = currentData.weather.timestamp;
   int ageMinutes = (now - updateTime) / 60;
   display.setCursor(x + barWidth - 100, y + 18);
   if (ageMinutes < 60) {
-    display.printf("%dm ago", ageMinutes);
+    display.printf("vor %dm", ageMinutes);  // German: "vor X Minuten"
   } else {
-    display.printf("%dh ago", ageMinutes / 60);
+    display.printf("vor %dh", ageMinutes / 60);  // German: "vor X Stunden"
   }
 }
 
@@ -692,10 +692,10 @@ void drawModernEventsTimeline() {
   int timelineWidth = display.width() - 60;  // Same margins as other elements (30px each side)
   int eventCardWidth = timelineWidth;
   
-  // Events section header
+  // Events section header - German
   display.setFont(&FreeMonoBold12pt7b);
   display.setCursor(marginLeft, timelineStartY);
-  display.print("EVENTS");
+  display.print("TERMINE");  // German for "EVENTS"
   
   int currentY = timelineStartY + 25;
   
@@ -715,11 +715,11 @@ void drawModernEventsTimeline() {
     currentY += 50;  // Space between event cards
   }
   
-  // If more events, show count
+  // If more events, show count - German text
   if (currentData.event_count > 8) {
     display.setFont(&FreeMono9pt7b);
     display.setCursor(marginLeft, currentY);
-    display.printf("+ %d more events...", currentData.event_count - 8);
+    display.printf("+ %d weitere...", currentData.event_count - 8);  // German: "+ X weitere..."
   }
 }
 
@@ -786,8 +786,8 @@ void drawNoEventsCard(int x, int y, int width) {
   display.drawRect(x, y, width, cardHeight, GxEPD_BLACK);
   
   display.setFont(&FreeMono9pt7b);
-  display.setCursor(x + width/2 - 60, y + 25);
-  display.print("No events today");
+  display.setCursor(x + width/2 - 80, y + 25);  // Adjusted for German text width
+  display.print("Keine Termine heute");  // German: "No events today"
 }
 
 void drawModernFooter() {
@@ -804,11 +804,11 @@ void drawModernFooter() {
   display.setCursor(30, footerY);
   display.print("PAULANDER");
   
-  // Last update time (weather timestamp - this is OK since it's not current time) - CENTERED
+  // Last update time (weather timestamp - this is OK since it's not current time) - CENTERED - German
   time_t updateTime = currentData.weather.timestamp;
   struct tm* timeInfo = localtime(&updateTime);
-  char updateText[20];
-  sprintf(updateText, "Updated:%02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);
+  char updateText[25];
+  sprintf(updateText, "Update:%02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);  // Shorter German version
   int updateWidth = strlen(updateText) * 10;  // Accurate width calculation
   int centerX = (display.width() / 2) - (updateWidth / 2);
   display.setCursor(centerX, footerY);

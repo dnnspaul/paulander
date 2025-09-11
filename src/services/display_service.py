@@ -16,6 +16,7 @@ import hashlib
 from src.services.config_service import ConfigService
 from src.services.weather_service import WeatherService
 from src.services.calendar_service import CalendarService
+from src.services.weather_translations import translate_weather_description, translate_ui_text
 
 # Add the waveshare library path from git submodule
 waveshare_lib_path = os.path.join(os.path.dirname(__file__), '../../waveshare-epaper/RaspberryPi_JetsonNano/python/lib')
@@ -393,15 +394,20 @@ class DisplayService:
             print("Fetching current weather details for modern display...")
             current_weather = self.weather_service.get_current_weather()
             
+            # Translate weather descriptions to German before caching
+            current_desc = weather.get('current_description', 'N/A')
+            today_desc = weather.get('today_description', 'N/A')
+            tomorrow_desc = weather.get('tomorrow_description', 'N/A') if weather.get('tomorrow_description') else None
+            
             self.cached_weather_data = {
                 'current_temperature': weather.get('current_temperature', 0.0),
-                'current_description': weather.get('current_description', 'N/A')[:63],  # Limit to 63 chars
+                'current_description': translate_weather_description(current_desc)[:63],  # Translate and limit to 63 chars
                 'today_min': weather.get('today_min', 0.0),
                 'today_max': weather.get('today_max', 0.0),
-                'today_description': weather.get('today_description', 'N/A')[:63],
+                'today_description': translate_weather_description(today_desc)[:63],  # Translate and limit
                 'tomorrow_min': weather.get('tomorrow_min'),
                 'tomorrow_max': weather.get('tomorrow_max'),
-                'tomorrow_description': weather.get('tomorrow_description', 'N/A')[:63] if weather.get('tomorrow_description') else None,
+                'tomorrow_description': translate_weather_description(tomorrow_desc)[:63] if tomorrow_desc else None,  # Translate if available
                 'location': weather.get('location', '')[:31],  # Limit to 31 chars
                 # Enhanced data for modern display (no icons)
                 'humidity': int(current_weather.get('humidity', 0)),
@@ -452,12 +458,20 @@ class DisplayService:
             import traceback
             print(f"Full traceback: {traceback.format_exc()}")
             
-            # Use fallback data if APIs fail
+            # Use fallback data if APIs fail - with German translations
             if not self.cached_weather_data:
                 self.cached_weather_data = {
-                    'temperature': 0.0,
-                    'description': 'Weather unavailable',
+                    'current_temperature': 0.0,
+                    'current_description': translate_weather_description('Weather unavailable'),
+                    'today_min': 0.0,
+                    'today_max': 0.0,
+                    'today_description': translate_weather_description('Data unavailable'),
+                    'tomorrow_min': None,
+                    'tomorrow_max': None,
+                    'tomorrow_description': translate_weather_description('No forecast available'),
                     'location': '',
+                    'humidity': 0,
+                    'wind_speed': 0.0,
                     'timestamp': int(time.time())
                 }
             if not self.cached_calendar_data:
