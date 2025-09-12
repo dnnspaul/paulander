@@ -25,6 +25,8 @@ The color display shows a daily AI-generated image based on the date, weather an
 | Moss 500g                            | 20.99 €  | https://amzn.to/4gmp7sG |
 | Waveshare 7.5" E-INK Display         | 69.99 €  | https://amzn.to/4gi6ohG |
 
+*Also a solder station and some wires are needed.*
+
 In the first draft the shopping list was way cheaper, but the idea with a color display in combination with AI image generation didn't left me.
 
 ## Quick Start
