@@ -12,18 +12,19 @@ The color display shows a daily AI-generated image based on the date, weather an
 
 
 ## Shopping List
-| Name                                 | Price    | Amazon Link             |
-|--------------------------------------|----------|-------------------------|
-| ESP32 NodeMCU (unsoldered)           | 10.99 €  | https://amzn.to/4no5YZF |
-| Raspberry Pi Power Supply            | 13.00 €  | https://amzn.to/4nqPOPk |
-| Samsung PRO Endurance microSD 32GB   | 12.09 €  | https://amzn.to/4npeDeb |
-| Raspberry Pi Zero 2 W                | 22.99 €  | https://amzn.to/3HRFMHV |
-| Raspberry Pi Case                    | 10.99 €  | https://amzn.to/46gbJS6 |
-| Wooden Foil                          | 6.59 €   | https://amzn.to/3JXo3PN |
-| Moos Glue                            | 17.98 €  | https://amzn.to/46wEbk0 |
-| Waveshare 7.3" 6-Color E-INK Display | 107.99 € | https://amzn.to/3IiN07R |
-| Moss 500g                            | 20.99 €  | https://amzn.to/4gmp7sG |
-| Waveshare 7.5" E-INK Display         | 69.99 €  | https://amzn.to/4gi6ohG |
+| Name                                 | Price    | Amazon Link                                                               |
+|--------------------------------------|----------|---------------------------------------------------------------------------|
+| ESP32 NodeMCU (unsoldered)           | 10.99 €  | https://amzn.to/4no5YZF                                                   |
+| Raspberry Pi Power Supply            | 13.00 €  | https://amzn.to/4nqPOPk                                                   |
+| Samsung PRO Endurance microSD 32GB   | 12.09 €  | https://amzn.to/4npeDeb                                                   |
+| Raspberry Pi Zero 2 W                | 22.99 €  | https://amzn.to/3HRFMHV                                                   |
+| Raspberry Pi Case                    | 10.99 €  | https://amzn.to/46gbJS6                                                   |
+| Wooden Foil                          | 6.59 €   | https://amzn.to/3JXo3PN                                                   |
+| Moos Glue                            | 17.98 €  | https://amzn.to/46wEbk0                                                   |
+| Waveshare 7.3" 6-Color E-INK Display | 107.99 € | https://amzn.to/3IiN07R                                                   |
+| Moss 500g                            | 20.99 €  | https://amzn.to/4gmp7sG                                                   |
+| Waveshare 7.5" E-INK Display         | 69.99 €  | https://amzn.to/4gi6ohG                                                   |
+| IKEA RÖDALM 81x41cm                  | 17.99 €  | https://www.ikea.com/de/de/p/roedalm-rahmen-fuer-3-bilder-weiss-10553731/ |
 
 *Also a solder station and some wires are needed.*
 
