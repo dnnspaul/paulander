@@ -1,6 +1,5 @@
-# Paulander
-
-![Paulander](./documentation_images/header.jpg)
+![Paulander](./documentation_images/header.png)
+![Web Interface](./documentation_images/web_interface.png)
 
 I needed a gift for my girlfriend and I wanted to make it myself.
 This is the result. Shoutout to [Anke Dietzen](https://www.raspberry-pi-geek.de/ausgaben/rpg/2019/06/infoscreen-mit-e-ink-displays/) for the inspiration.
