@@ -13,7 +13,7 @@ class ConfigService:
             'openweather_api_key': os.getenv('OPENWEATHER_API_KEY', ''),
             'gemini_api_key': os.getenv('GEMINI_API_KEY', ''),
             'color_display_refresh_time': '06:00',
-            'ai_prompt_template': '''I want you to write a detailed prompt for an AI to generate a modern painting that is being shown on an 7.3" e-ink display that supports 6 colors (black, white, red, green, blue, yellow) with a resolution of 800x480. The generated image should reflect today.
+            'ai_prompt_template': '''I want you to write a detailed prompt for an AI to generate a modern painting that is being shown on an 7.3" e-ink display that supports 6 colors (black, white, red, green, blue, yellow) with a aspect ratio of 5:3. The generated image should reflect today.
 
 *Todays information*
 Date: {today_date}
@@ -23,9 +23,10 @@ Calendar events:
 
 ONLY RETURN YOUR PROMPT SUGGESTION, WITHOUT ANYTHING ELSE (DISMISS SOMETHING LIKE `Here's your prompt`).
 **Never** mention the e-ink display, because it will result in an e-ink display being rendered. Also make sure, that an artistic painting is generated instead of anything that looks like an info screen.
+Be creative by choosing a style, but NEVER choose abstract design.
 Always generate a single picture and never split it into multiple images. Try to combine every occassion that the calendar, the weather and the date has to offer into a single image.
 
-Make it vintage-poster style. Let it only generate an image without any text that is drawn onto the image like title, date or something like that.'''
+Let it only generate an image without any text that is drawn onto the image like title, date or something like that.'''
         }
     
     def get_config(self) -> Dict[str, Any]:
