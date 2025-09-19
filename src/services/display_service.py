@@ -730,7 +730,7 @@ class DisplayService:
             # Configure the new Gemini client
             client = genai.Client(
                 api_key=gemini_api_key,
-                http_options=types.HttpOptions(timeout=60_000)
+                http_options=types.HttpOptions(timeout=120_000)
             )
 
             print(f"Gemini client configured successfully")
