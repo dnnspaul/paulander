@@ -50,8 +50,7 @@ struct DisplayData {
   WeatherData weather;
   CalendarEvent events[6];  // Max 6 events
   uint8_t event_count;
-  uint32_t data_hash;  // Local hash to detect changes
-  char received_hash[16];  // Hash received from Python backend
+  char received_hash[16];  // Hash received from Python backend for change detection
   uint32_t timestamp;
 };
 
@@ -64,6 +63,7 @@ bool displayInitialized = false;
 unsigned long lastDisplayUpdate = 0;
 const unsigned long DISPLAY_UPDATE_INTERVAL = 1800000;  // 30 minutes in ms
 uint32_t skippedUpdates = 0;  // Counter for skipped updates due to hash matching
+char previousHash[16] = "";   // Store previous hash for comparison
 
 // I2C receive buffer - 2KB to handle complete data structure with headroom
 uint8_t i2cBuffer[2048];  // 2KB buffer for reliable data reception
@@ -106,7 +106,7 @@ void setup() {
   
   // Initialize hash fields
   strcpy(currentData.received_hash, "initial");
-  strcpy(previousData.received_hash, "none");
+  strcpy(previousHash, "none");
 
   // Initialize I2C timing
   lastReceiveTime = millis();
@@ -400,9 +400,6 @@ void processI2CData() {
     strncpy(currentData.received_hash, doc["data_hash"] | "", sizeof(currentData.received_hash) - 1);
     currentData.received_hash[sizeof(currentData.received_hash) - 1] = '\0';  // Ensure null termination
 
-    // Calculate hash of current data for change detection
-    uint32_t newHash = calculateDataHash(&currentData);
-
     Serial.println("=== JSON Data Processed Successfully ===");
     Serial.printf("Current Temperature: %.1f°C\n", currentData.weather.current_temperature);
     Serial.printf("Current Weather: %s\n", currentData.weather.current_description);
@@ -435,47 +432,26 @@ void processI2CData() {
       }
     }
 
-    Serial.printf("Local data hash: 0x%08X\n", newHash);
     Serial.printf("Received hash: %s\n", currentData.received_hash);
+    Serial.printf("Previous hash: %s\n", previousHash);
 
-    // Enhanced change detection using both local hash and received hash
-    bool localHashChanged = (newHash != previousData.data_hash);
-    bool receivedHashChanged = (strcmp(currentData.received_hash, previousData.received_hash) != 0);
+    // Simple change detection using only received hash from Python backend
+    bool hashChanged = (strcmp(currentData.received_hash, previousHash) != 0);
     
-    if (localHashChanged || receivedHashChanged) {
-      if (localHashChanged && receivedHashChanged) {
-        Serial.println("✓ Data changed (both local and received hash) - display update needed");
-      } else if (localHashChanged) {
-        Serial.println("✓ Data changed (local hash) - display update needed");
-      } else {
-        Serial.println("✓ Data changed (received hash) - display update needed");
-      }
-      
+    if (hashChanged) {
+      Serial.println("✓ Data changed (hash differs) - display update needed");
       displayNeedsUpdate = true;
-      previousData = currentData;
-      previousData.data_hash = newHash;
-      strncpy(previousData.received_hash, currentData.received_hash, sizeof(previousData.received_hash));
+      strncpy(previousHash, currentData.received_hash, sizeof(previousHash));
     } else {
       skippedUpdates++;
-      Serial.printf("✓ Data unchanged (both hashes match) - no display update needed (skipped: %u)\n", skippedUpdates);
+      Serial.printf("✓ Data unchanged (hash matches) - no display update needed (skipped: %u)\n", skippedUpdates);
     }
-
-    currentData.data_hash = newHash;
     dataReceived = true;
   } else {
     Serial.printf("✗ Insufficient I2C data: %d bytes (expected: 50+ bytes for JSON)\n", i2cDataLength);
   }
 }
 
-uint32_t calculateDataHash(DisplayData* data) {
-  // Simple hash calculation for change detection
-  uint32_t hash = 0;
-  uint8_t* ptr = (uint8_t*)data;
-  for (int i = 0; i < sizeof(DisplayData) - sizeof(uint32_t); i++) {
-    hash = hash * 31 + ptr[i];
-  }
-  return hash;
-}
 
 void showStartupMessage() {
   if (!displayInitialized) return;
@@ -521,7 +497,7 @@ void updateDisplay() {
   }
 
   Serial.println("=== Updating Modern B&W Display ===");
-  Serial.printf("Updating display due to data changes (hash: %s)\n", currentData.received_hash);
+  Serial.printf("Updating display due to data changes (received hash: %s)\n", currentData.received_hash);
 
   display.fillScreen(GxEPD_WHITE);
   display.setTextColor(GxEPD_BLACK);

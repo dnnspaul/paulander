@@ -105,7 +105,7 @@ class DisplayService:
         self.last_api_fetch = 0
         self.last_i2c_send = 0
         self.API_CACHE_DURATION = 1800  # 30 minutes in seconds
-        self.I2C_SEND_INTERVAL = 30     # 30 seconds
+        self.I2C_SEND_INTERVAL = 60     # 60 seconds
         
         # Don't load the display module during init - wait until actually needed
         print("Display service initialized (hardware will be loaded on first use)")
@@ -368,7 +368,7 @@ class DisplayService:
             else:
                 print("Using cached data (API cache still valid)")
             
-            # Send data to ESP32 via I2C (every 30 seconds)
+            # Send data to ESP32 via I2C (every 60 seconds)
             if (current_time - self.last_i2c_send) >= self.I2C_SEND_INTERVAL:
                 print("Sending data to ESP32 via I2C...")
                 self._send_data_to_esp32()
@@ -669,10 +669,19 @@ class DisplayService:
         return sanitized
     
     def _calculate_data_hash(self, json_data: dict) -> str:
-        """Calculate a hash of the JSON data for change detection"""
+        """Calculate a hash of the JSON data for change detection (excluding timestamp)"""
+        # Create a copy without the timestamp field for consistent hashing
+        data_copy = json_data.copy()
+        if 'timestamp' in data_copy:
+            del data_copy['timestamp']
+        if 'weather' in data_copy and 'timestamp' in data_copy['weather']:
+            weather_copy = data_copy['weather'].copy()
+            del weather_copy['timestamp']
+            data_copy['weather'] = weather_copy
+        
         # Create a consistent string representation for hashing
         # Sort keys to ensure consistent ordering
-        json_string = json.dumps(json_data, sort_keys=True, separators=(',', ':'))
+        json_string = json.dumps(data_copy, sort_keys=True, separators=(',', ':'))
         # Calculate SHA256 hash and return first 8 characters (32-bit equivalent)
         hash_object = hashlib.sha256(json_string.encode('utf-8'))
         return hash_object.hexdigest()[:8]

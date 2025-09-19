@@ -45,10 +45,10 @@ class SchedulerService:
         # Get configuration
         config = self.config_service.get_config()
         
-        # Schedule B&W display refresh (at :00 and :30 of every hour)
+        # Schedule B&W display refresh (every minute)
         self.scheduler.add_job(
             func=self._refresh_bw_display,
-            trigger=CronTrigger(minute='0,30'),
+            trigger=IntervalTrigger(minutes=1),
             id='bw_display_refresh',
             name='Refresh B&W Display',
             replace_existing=True
