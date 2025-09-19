@@ -6,13 +6,13 @@ from datetime import datetime
 from typing import Dict, Any, List
 from io import BytesIO
 import json
-import google.generativeai as genai
-from google import genai as genai_new
+from google import genai
 from google.genai import types
 import struct
 import time
 import pytz
 import hashlib
+import httpx
 from src.services.config_service import ConfigService
 from src.services.weather_service import WeatherService
 from src.services.calendar_service import CalendarService
@@ -728,24 +728,30 @@ class DisplayService:
         
         try:
             # Configure the new Gemini client
-            client = genai_new.Client(api_key=gemini_api_key)
+            client = genai.Client(
+                api_key=gemini_api_key,
+                http_options=types.HttpOptions(timeout=60_000)
+            )
+
             print(f"Gemini client configured successfully")
             
-            # Generate the detailed prompt
+            # Generate the detailed prompt with retry logic
             print(f"Calling Gemini 2.5 Flash for prompt generation...")
-            prompt_response = client.models.generate_content(
+            prompt_response = self._retry_gemini_api_call(
+                client.models.generate_content,
                 model="gemini-2.5-flash",
-                contents=[prompt_generation_text],
+                contents=[prompt_generation_text]
             )
             
             detailed_prompt = prompt_response.text.strip()
             print(f"✓ Step 1 completed - Generated prompt: {detailed_prompt}")
             
-            # Step 2: Generate image using the detailed prompt
+            # Step 2: Generate image using the detailed prompt with retry logic
             print(f"Step 2: Generating image with Gemini 2.5 Flash Image Preview...")
             print(f"Using prompt: {detailed_prompt[:100]}...")
             
-            image_response = client.models.generate_content(
+            image_response = self._retry_gemini_api_call(
+                client.models.generate_content,
                 model="gemini-2.5-flash-image-preview",
                 contents=[detailed_prompt]
             )
@@ -1093,6 +1099,62 @@ class DisplayService:
         
         return lines
     
+    def _retry_gemini_api_call(self, func, *args, max_retries=3, initial_delay=1.0, **kwargs):
+        """
+        Retry Gemini API calls with exponential backoff for timeout exceptions
+        
+        Args:
+            func: The function to call
+            *args: Arguments to pass to the function
+            max_retries: Maximum number of retry attempts (default: 3)
+            initial_delay: Initial delay in seconds (default: 1.0)
+            **kwargs: Keyword arguments to pass to the function
+            
+        Returns:
+            The result of the successful function call
+            
+        Raises:
+            The last exception encountered if all retries fail
+        """
+        last_exception = None
+        delay = initial_delay
+        
+        for attempt in range(max_retries + 1):  # +1 for initial attempt
+            try:
+                print(f"Gemini API call attempt {attempt + 1}/{max_retries + 1}")
+                return func(*args, **kwargs)
+                
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.TimeoutException) as e:
+                last_exception = e
+                if attempt < max_retries:
+                    print(f"✗ Gemini API timeout (attempt {attempt + 1}): {type(e).__name__}: {e}")
+                    print(f"Retrying in {delay:.1f} seconds...")
+                    time.sleep(delay)
+                    delay *= 2  # Exponential backoff
+                else:
+                    print(f"✗ Gemini API timeout after {max_retries + 1} attempts: {type(e).__name__}: {e}")
+                    raise e
+                    
+            except httpx.HTTPError as e:
+                last_exception = e
+                if attempt < max_retries:
+                    print(f"✗ Gemini API HTTP error (attempt {attempt + 1}): {type(e).__name__}: {e}")
+                    print(f"Retrying in {delay:.1f} seconds...")
+                    time.sleep(delay)
+                    delay *= 2  # Exponential backoff
+                else:
+                    print(f"✗ Gemini API HTTP error after {max_retries + 1} attempts: {type(e).__name__}: {e}")
+                    raise e
+                    
+            except Exception as e:
+                # For non-timeout/non-HTTP errors, don't retry
+                print(f"✗ Gemini API non-retryable error: {type(e).__name__}: {e}")
+                raise e
+        
+        # This should never be reached, but just in case
+        if last_exception:
+            raise last_exception
+
     def cleanup(self):
         """Clean up GPIO resources"""
         try:
