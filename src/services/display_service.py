@@ -747,12 +747,12 @@ class DisplayService:
             print(f"✓ Step 1 completed - Generated prompt: {detailed_prompt}")
             
             # Step 2: Generate image using the detailed prompt with retry logic
-            print(f"Step 2: Generating image with Gemini 2.5 Flash Image Preview...")
+            print(f"Step 2: Generating image with Gemini 2.5 Flash Image...")
             print(f"Using prompt: {detailed_prompt[:100]}...")
             
             image_response = self._retry_gemini_api_call(
                 client.models.generate_content,
-                model="gemini-2.5-flash-image-preview",
+                model="gemini-2.5-flash-image",
                 contents=[detailed_prompt]
             )
             

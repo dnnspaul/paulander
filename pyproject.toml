@@ -16,7 +16,7 @@ dependencies = [
     "google-generativeai>=0.3.0",
     "google-genai>=0.6.0",
     "pytz>=2023.3",
-    "vobject>=0.9.6",
+    "icalendar>=5.0.0",
 ]
 
 [project.optional-dependencies]
