@@ -1,5 +1,5 @@
 import caldav
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 import pytz
 from typing import List, Dict, Any
 from src.services.config_service import ConfigService
@@ -57,95 +57,50 @@ class CalendarService:
                 'message': f'Connection failed: {str(e)}'
             }
     
-    def _get_calendar(self):
-        """Get the primary calendar"""
+    def _get_calendars(self) -> list:
+        """Get all calendars"""
         if not self.client:
             self.client = self._get_client()
         
-        if not self.calendar:
-            principal = self.client.principal()
-            calendars = principal.calendars()
-            
-            if not calendars:
-                raise Exception("No calendars found")
-            
-            # Use the first calendar or find the primary one
-            self.calendar = calendars[0]
-            
-        return self.calendar
+        principal = self.client.principal()
+        calendars = principal.calendars()
+        
+        if not calendars:
+            raise Exception("No calendars found")
+        
+        return calendars
     
     def get_upcoming_events(self, days_ahead: int = 7) -> List[Dict[str, Any]]:
-        """Get upcoming events for the next N days"""
+        """Get upcoming events for the next N days from all calendars"""
         try:
-            calendar = self._get_calendar()
+            calendars = self._get_calendars()
             
             # Define time range
             now = datetime.now(pytz.UTC)
+            start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
             end_date = now + timedelta(days=days_ahead)
-            
-            # Search for events
-            events = calendar.search(
-                start=now,
-                end=end_date,
-                event=True,
-                expand=True
-            )
             
             event_list = []
             
-            for event in events:
+            for calendar in calendars:
                 try:
-                    # Check if event has vobject_instance
-                    if not hasattr(event, 'vobject_instance') or event.vobject_instance is None:
-                        continue
-                    
-                    # Check if vobject_instance has vevent
-                    if not hasattr(event.vobject_instance, 'vevent'):
-                        continue
-                    
-                    # Parse the event
-                    vevent = event.vobject_instance.vevent
-                    
-                    # Extract basic information
-                    event_id = str(event.id) if hasattr(event, 'id') else 'unknown'
-                    title = str(vevent.summary.value) if hasattr(vevent, 'summary') and hasattr(vevent.summary, 'value') else 'No Title'
-                    
-                    # Handle start time
-                    start_time = None
-                    if hasattr(vevent, 'dtstart') and hasattr(vevent.dtstart, 'value'):
-                        start_time = self._parse_datetime(vevent.dtstart.value)
-                    
-                    # Handle end time
-                    end_time = None
-                    if hasattr(vevent, 'dtend') and hasattr(vevent.dtend, 'value'):
-                        end_time = self._parse_datetime(vevent.dtend.value)
-                    
-                    # Handle location
-                    location = None
-                    if hasattr(vevent, 'location') and hasattr(vevent.location, 'value'):
-                        location = str(vevent.location.value)
-                    
-                    # Handle description
-                    description = None
-                    if hasattr(vevent, 'description') and hasattr(vevent.description, 'value'):
-                        description = str(vevent.description.value)
-                    
-                    event_data = {
-                        'id': event_id,
-                        'title': title,
-                        'start': start_time,
-                        'end': end_time,
-                        'location': location,
-                        'description': description,
-                        'all_day': self._is_all_day_event(vevent)
-                    }
-                    
-                    # Only add events that have a start time and are in the future
-                    if event_data['start'] and event_data['start'] > now:
-                        event_list.append(event_data)
-                        
-                except Exception as e:
+                    # Search for events
+                    events = calendar.search(
+                        start=start_of_today,
+                        end=end_date,
+                        event=True,
+                        expand=True
+                    )
+                except Exception:
                     continue
+                
+                for event in events:
+                    try:
+                        event_data = self._parse_event_ical(event)
+                        if event_data and event_data['start']:
+                            event_list.append(event_data)
+                    except Exception:
+                        continue
             
             # Sort by start time
             event_list.sort(key=lambda x: x['start'])
@@ -156,64 +111,95 @@ class CalendarService:
             print(f"Error fetching calendar events: {e}")
             return []
     
-    def _parse_datetime(self, dt):
-        """Parse datetime from various formats"""
-        if isinstance(dt, datetime):
-            if dt.tzinfo is None:
-                # Assume local timezone
-                dt = pytz.UTC.localize(dt)
-            return dt
-        elif isinstance(dt, str):
-            # Try to parse string datetime
-            try:
-                parsed = datetime.fromisoformat(dt.replace('Z', '+00:00'))
-                if parsed.tzinfo is None:
-                    parsed = pytz.UTC.localize(parsed)
-                return parsed
-            except:
-                pass
+    def _parse_event_ical(self, event) -> Dict[str, Any] | None:
+        """Parse a calendar event using the icalendar library (caldav 2.0+)"""
+        ical = event.icalendar_instance
+        if ical is None:
+            return None
+        
+        for component in ical.walk():
+            if component.name != "VEVENT":
+                continue
+            
+            title = str(component.get("SUMMARY", "No Title"))
+            
+            # Handle start time
+            dtstart_prop = component.get("DTSTART")
+            start_time = self._parse_ical_dt(dtstart_prop) if dtstart_prop else None
+            
+            # Handle end time
+            dtend_prop = component.get("DTEND")
+            end_time = self._parse_ical_dt(dtend_prop) if dtend_prop else None
+            
+            # Handle location
+            location = component.get("LOCATION")
+            location = str(location) if location else None
+            
+            # Handle description
+            description = component.get("DESCRIPTION")
+            description = str(description) if description else None
+            
+            # All-day check
+            all_day = isinstance(dtstart_prop.dt, date) and not isinstance(dtstart_prop.dt, datetime) if dtstart_prop else False
+            
+            event_id = str(component.get("UID", "unknown"))
+            
+            return {
+                'id': event_id,
+                'title': title,
+                'start': start_time,
+                'end': end_time,
+                'location': location,
+                'description': description,
+                'all_day': all_day
+            }
         
         return None
     
-    def _is_all_day_event(self, vevent):
-        """Check if event is all-day"""
-        if hasattr(vevent, 'dtstart') and hasattr(vevent.dtstart, 'value'):
-            return not isinstance(vevent.dtstart.value, datetime)
-        return False
+    def _parse_ical_dt(self, prop) -> datetime | None:
+        """Parse a datetime/date from an icalendar property"""
+        if prop is None:
+            return None
+        dt = prop.dt if hasattr(prop, 'dt') else prop
+        if isinstance(dt, datetime):
+            if dt.tzinfo is None:
+                dt = pytz.UTC.localize(dt)
+            return dt
+        elif isinstance(dt, date):
+            # Convert date to datetime at midnight UTC
+            return datetime(dt.year, dt.month, dt.day, tzinfo=pytz.UTC)
+        return None
     
     def get_today_events(self) -> List[Dict[str, Any]]:
         """Get today's events for AI image generation prompt"""
         try:
-            calendar = self._get_calendar()
+            calendars = self._get_calendars()
             
             # Get today's events
             now = datetime.now(pytz.UTC)
             start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
             end_of_day = start_of_day + timedelta(days=1)
             
-            events = calendar.search(
-                start=start_of_day,
-                end=end_of_day,
-                event=True,
-                expand=True
-            )
-            
             event_list = []
             
-            for event in events:
+            for calendar in calendars:
                 try:
-                    vevent = event.vobject_instance.vevent
-                    event_data = {
-                        'title': str(vevent.summary.value) if hasattr(vevent, 'summary') else 'No Title',
-                        'start': self._parse_datetime(vevent.dtstart.value) if hasattr(vevent, 'dtstart') else None,
-                        'location': str(vevent.location.value) if hasattr(vevent, 'location') else None,
-                        'all_day': self._is_all_day_event(vevent)
-                    }
-                    
-                    event_list.append(event_data)
-                    
-                except Exception as e:
+                    events = calendar.search(
+                        start=start_of_day,
+                        end=end_of_day,
+                        event=True,
+                        expand=True
+                    )
+                except Exception:
                     continue
+                
+                for event in events:
+                    try:
+                        event_data = self._parse_event_ical(event)
+                        if event_data:
+                            event_list.append(event_data)
+                    except Exception:
+                        continue
             
             # Sort by start time
             event_list.sort(key=lambda x: x['start'] if x['start'] else datetime.min.replace(tzinfo=pytz.UTC))
@@ -223,3 +209,4 @@ class CalendarService:
         except Exception as e:
             print(f"Error fetching today's events: {e}")
             return []
+
