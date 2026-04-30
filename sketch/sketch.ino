@@ -828,9 +828,9 @@ void drawEventTimelineCard(int x, int y, int width, CalendarEvent& event) {
     display.setFont(&FreeMonoBold9pt7b);
 
     if (event.all_day) {
-      // "GANZ" — 4 monospace chars × 11 px = 44 px in 70 px chip → cursor x+13
-      display.setCursor(x + 13, y + 26);
-      display.print("GANZ");
+      // "--:--" mirrors the HH:MM shape to mean "no specific time" (5 chars × 11 = 55 px)
+      display.setCursor(x + 8, y + 26);
+      display.print("--:--");
     } else {
       time_t eventTime = event.start_time;
       struct tm timeInfo;
