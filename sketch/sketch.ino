@@ -551,7 +551,7 @@ void drawModernHeader() {
   // Date centered in header (German format)
   char dateText[12];
   sprintf(dateText, "%02d.%02d.%d", timeInfo->tm_mday, timeInfo->tm_mon + 1, timeInfo->tm_year + 1900);
-  int dateWidth = strlen(dateText) * 12;  // Accurate width calculation for bold font
+  int dateWidth = strlen(dateText) * 11;  // FreeMonoBold9pt7b monospace advance
   int centerX = (display.width() / 2) - (dateWidth / 2);
   display.setCursor(centerX, 25);
   display.print(dateText);
@@ -593,7 +593,7 @@ void drawModernWeatherCards() {
                     "", false);
   } else {
     // No tomorrow data - draw a simple info card - German text
-    drawInfoCard(marginLeft + (cardWidth * 2) + 40, startY, cardWidth, cardHeight, "MORGEN", "Keine Vorhersage");
+    drawInfoCard(marginLeft + (cardWidth * 2) + 40, startY, cardWidth, cardHeight, "MORGEN", "Keine Daten");
   }
   
   // Weather details bar below cards with consistent width
@@ -627,7 +627,7 @@ void drawWeatherCard(int x, int y, int width, int height, const char* title,
   if (desc.length() > 12) {
     desc = desc.substring(0, 10) + "..";
   }
-  int descWidth = desc.length() * 10;  // More accurate width calculation
+  int descWidth = desc.length() * 11;  // FreeMono9pt7b monospace advance
   int descX = x + (width / 2) - (descWidth / 2);
   display.setCursor(descX, y + height - 20);
   display.print(desc);
@@ -637,16 +637,16 @@ void drawInfoCard(int x, int y, int width, int height, const char* title, const 
   // Simple info card
   display.drawRect(x, y, width, height, GxEPD_BLACK);
   
-  // Title - properly centered
+  // Title - properly centered (FreeMono9pt7b advance ~11 px)
   display.setFont(&FreeMono9pt7b);
-  int titleWidth = strlen(title) * 10;  // More accurate width calculation
+  int titleWidth = strlen(title) * 11;
   int titleX = x + (width / 2) - (titleWidth / 2);
   display.setCursor(titleX, y + 20);
   display.print(title);
-  
-  // Info text
+
+  // Info text (FreeMono9pt7b advance ~11 px)
   display.setFont(&FreeMono9pt7b);
-  int infoX = x + (width / 2) - (strlen(info) * 6 / 2);
+  int infoX = x + (width / 2) - ((strlen(info) * 11) / 2);
   display.setCursor(infoX, y + height/2 + 5);
   display.print(info);
 }
@@ -691,36 +691,103 @@ void drawModernEventsTimeline() {
   int timelineStartY = 270;  // More spacing from humidity bar (185+25+60=250)
   int timelineWidth = display.width() - 60;  // Same margins as other elements (30px each side)
   int eventCardWidth = timelineWidth;
-  
+
   // Events section header - German
   display.setFont(&FreeMonoBold12pt7b);
   display.setCursor(marginLeft, timelineStartY);
   display.print("TERMINE");  // German for "EVENTS"
-  
+
   int currentY = timelineStartY + 25;
-  
+
   if (currentData.event_count == 0) {
     drawNoEventsCard(marginLeft, currentY, eventCardWidth);
     return;
   }
-  
-  // Draw timeline events
-  for (int i = 0; i < currentData.event_count && i < 8; i++) {  // Show max 8 events in timeline
-    if (currentY > display.height() - 60) break;
-    
+
+  int bottomLimit = display.height() - 60;
+  int lastDay = -1, lastMonth = -1, lastYear = -1;
+  int eventsDrawn = 0;
+
+  for (int i = 0; i < currentData.event_count && i < 8; i++) {
     CalendarEvent& event = currentData.events[i];
-    if (!event.valid) continue;
-    
+    if (!event.valid || event.start_time == 0) continue;
+
+    time_t eventTime = event.start_time;
+    struct tm eventTm;
+    localtime_r(&eventTime, &eventTm);
+
+    bool needsDateHeader = (eventTm.tm_mday != lastDay ||
+                            eventTm.tm_mon  != lastMonth ||
+                            eventTm.tm_year != lastYear);
+
+    int requiredHeight = (needsDateHeader ? 28 : 0) + 40;
+    if (currentY + requiredHeight > bottomLimit) break;
+
+    if (needsDateHeader) {
+      drawEventDateHeader(marginLeft, currentY, eventCardWidth, &eventTm);
+      currentY += 28;
+      lastDay = eventTm.tm_mday;
+      lastMonth = eventTm.tm_mon;
+      lastYear = eventTm.tm_year;
+    }
+
     drawEventTimelineCard(marginLeft, currentY, eventCardWidth, event);
-    currentY += 50;  // Space between event cards
+    currentY += 50;
+    eventsDrawn++;
   }
-  
-  // If more events, show count - German text
-  if (currentData.event_count > 8) {
+
+  // If more events than we drew, show remaining count - German text
+  int remaining = currentData.event_count - eventsDrawn;
+  if (remaining > 0 && currentY < bottomLimit) {
     display.setFont(&FreeMono9pt7b);
     display.setCursor(marginLeft, currentY);
-    display.printf("+ %d weitere...", currentData.event_count - 8);  // German: "+ X weitere..."
+    display.printf("+ %d weitere...", remaining);  // German: "+ X weitere..."
   }
+}
+
+void drawEventDateHeader(int x, int y, int width, struct tm* eventTm) {
+  // German weekday abbreviations (tm_wday: 0=Sunday)
+  const char* weekdays[] = {"So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"};
+
+  // Compare against today and tomorrow based on the data timestamp
+  time_t now = currentData.timestamp;
+  struct tm nowTm;
+  localtime_r(&now, &nowTm);
+
+  time_t tomorrow = now + 86400;
+  struct tm tomorrowTm;
+  localtime_r(&tomorrow, &tomorrowTm);
+
+  bool isToday = (eventTm->tm_mday == nowTm.tm_mday &&
+                  eventTm->tm_mon  == nowTm.tm_mon  &&
+                  eventTm->tm_year == nowTm.tm_year);
+  bool isTomorrow = (eventTm->tm_mday == tomorrowTm.tm_mday &&
+                     eventTm->tm_mon  == tomorrowTm.tm_mon  &&
+                     eventTm->tm_year == tomorrowTm.tm_year);
+
+  char label[48];
+  int wday = eventTm->tm_wday;
+  if (wday < 0 || wday > 6) wday = 0;
+
+  if (isToday) {
+    snprintf(label, sizeof(label), "HEUTE - %s, %02d.%02d.",
+             weekdays[wday], eventTm->tm_mday, eventTm->tm_mon + 1);
+  } else if (isTomorrow) {
+    snprintf(label, sizeof(label), "MORGEN - %s, %02d.%02d.",
+             weekdays[wday], eventTm->tm_mday, eventTm->tm_mon + 1);
+  } else if (eventTm->tm_year == nowTm.tm_year) {
+    snprintf(label, sizeof(label), "%s, %02d.%02d.",
+             weekdays[wday], eventTm->tm_mday, eventTm->tm_mon + 1);
+  } else {
+    snprintf(label, sizeof(label), "%s, %02d.%02d.%d",
+             weekdays[wday], eventTm->tm_mday, eventTm->tm_mon + 1, eventTm->tm_year + 1900);
+  }
+
+  // Draw bold label, then a separator line just under it spanning the row
+  display.setFont(&FreeMonoBold9pt7b);
+  display.setCursor(x, y + 16);
+  display.print(label);
+  display.drawLine(x, y + 24, x + width, y + 24, GxEPD_BLACK);
 }
 
 void drawEventTimelineCard(int x, int y, int width, CalendarEvent& event) {
@@ -729,65 +796,63 @@ void drawEventTimelineCard(int x, int y, int width, CalendarEvent& event) {
   // Event card background
   display.drawRect(x, y, width, cardHeight, GxEPD_BLACK);
   
-  // Time indicator (left side) - WIDER TIME BOX
+  // Time indicator (left side) - date is shown in the date header above each group
   if (event.start_time > 0) {
     time_t eventTime = event.start_time;
-    struct tm* timeInfo = localtime(&eventTime);
-    
-    // Wider time box to fit "20:00" properly
-    int timeBoxWidth = 70;  // Increased from 50 to 70
+    struct tm timeInfo;
+    localtime_r(&eventTime, &timeInfo);
+
+    int timeBoxWidth = 70;
     display.fillRect(x + 2, y + 2, timeBoxWidth, cardHeight - 4, GxEPD_BLACK);
     display.setTextColor(GxEPD_WHITE);
-    display.setFont(&FreeMono9pt7b);
-    
-    // Time - centered in time box vertically
-    display.setCursor(x + 8, y + 18);  // Better vertical centering (y+18 instead of y+15)
-    display.printf("%02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);
-    
-    // Date (if different from today) - only show if there's a second line
-    time_t now = currentData.timestamp;
-    struct tm* nowInfo = localtime(&now);
-    if (timeInfo->tm_mday != nowInfo->tm_mday || timeInfo->tm_mon != nowInfo->tm_mon) {
-      display.setCursor(x + 8, y + 32);  // Better spacing
-      display.printf("%02d.%02d", timeInfo->tm_mday, timeInfo->tm_mon + 1);
-    }
-    
+    display.setFont(&FreeMonoBold9pt7b);
+
+    // Time centered in the time box (HH:MM is 5 monospace chars ~55px in a 70px box)
+    display.setCursor(x + 9, y + 26);
+    display.printf("%02d:%02d", timeInfo.tm_hour, timeInfo.tm_min);
+
     display.setTextColor(GxEPD_BLACK);  // Reset to black
   }
   
-  // Event title and location (right side) - ADJUSTED FOR WIDER TIME BOX
+  // Event title and location (right side, after 70 px time box + 8 px gap)
   display.setFont(&FreeMonoBold9pt7b);
-  
-  // Event title
+
+  // Title row is ~330 px usable (340 px from x+80 to card right border, less ~10 px margin).
+  // FreeMonoBold9pt7b advances 11 px per char → 30 chars fit.
   String eventTitle = String(event.title);
-  if (eventTitle.length() > 22) {  // Adjusted for wider time box
-    eventTitle = eventTitle.substring(0, 19) + "..";
+  if (eventTitle.length() > 30) {
+    eventTitle = eventTitle.substring(0, 28) + "..";
   }
-  
-  // Better vertical centering for event title
-  display.setCursor(x + 80, y + 18);  // Moved right (x+80 instead of x+60) and centered vertically
+
+  bool hasLocation = strlen(event.location) > 0;
+
+  // Without a location the title is the only line — center it vertically in the 40 px card.
+  // With a location, keep the two-line layout (title y+18, location y+32).
+  display.setCursor(x + 80, hasLocation ? y + 18 : y + 25);
   display.print(eventTitle);
-  
-  // Location (if exists) - better vertical centering
-  if (strlen(event.location) > 0) {
+
+  if (hasLocation) {
     display.setFont(&FreeMono9pt7b);
+    // "@ " prefix occupies 2 of the 30-char row budget, leaving 28 chars for the location.
     String location = String(event.location);
-    if (location.length() > 27) {  // Adjusted for wider time box
-      location = location.substring(0, 24) + "..";
+    if (location.length() > 28) {
+      location = location.substring(0, 26) + "..";
     }
-    display.setCursor(x + 80, y + 32);  // Moved right and better vertical positioning
+    display.setCursor(x + 80, y + 32);
     display.printf("@ %s", location.c_str());
   }
 }
 
 void drawNoEventsCard(int x, int y, int width) {
   int cardHeight = 40;
-  
+
   display.drawRect(x, y, width, cardHeight, GxEPD_BLACK);
-  
+
   display.setFont(&FreeMono9pt7b);
-  display.setCursor(x + width/2 - 80, y + 25);  // Adjusted for German text width
-  display.print("Keine Termine heute");  // German: "No events today"
+  const char* msg = "Keine Termine heute";  // German: "No events today"
+  int msgWidth = strlen(msg) * 11;  // FreeMono9pt7b advance
+  display.setCursor(x + (width / 2) - (msgWidth / 2), y + 25);
+  display.print(msg);
 }
 
 void drawModernFooter() {
@@ -809,7 +874,7 @@ void drawModernFooter() {
   struct tm* timeInfo = localtime(&updateTime);
   char updateText[25];
   sprintf(updateText, "Update:%02d:%02d", timeInfo->tm_hour, timeInfo->tm_min);  // Shorter German version
-  int updateWidth = strlen(updateText) * 10;  // Accurate width calculation
+  int updateWidth = strlen(updateText) * 11;  // FreeMono9pt7b monospace advance
   int centerX = (display.width() / 2) - (updateWidth / 2);
   display.setCursor(centerX, footerY);
   display.print(updateText);
