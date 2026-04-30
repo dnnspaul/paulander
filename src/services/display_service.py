@@ -447,7 +447,8 @@ class DisplayService:
                         'title': self._sanitize_text_for_display(title)[:63],  # Limit to 63 chars
                         'location': self._sanitize_text_for_display(location)[:31] if location else '',  # Limit to 31 chars
                         'start_time': start_time,
-                        'valid': bool(title)
+                        'valid': bool(title),
+                        'all_day': bool(event.get('all_day', False)),
                     }
                     self.cached_calendar_data.append(event_data)
             
@@ -585,7 +586,8 @@ class DisplayService:
                 "title": self._sanitize_text_for_display(event['title'])[:63],  # Limit title length
                 "location": self._sanitize_text_for_display(event['location']) if event['location'] != 'None' else '',
                 "start_time": event['start_time'],
-                "valid": event['valid']
+                "valid": event['valid'],
+                "all_day": bool(event.get('all_day', False)),
             }
             events_data.append(event_data)
         

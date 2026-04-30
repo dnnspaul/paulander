@@ -44,6 +44,7 @@ struct CalendarEvent {
   char location[32];
   uint32_t start_time;
   bool valid;
+  bool all_day;
 };
 
 struct DisplayData {
@@ -392,6 +393,7 @@ void processI2CData() {
       strncpy(currentData.events[i].location, events[i]["location"] | "", sizeof(currentData.events[i].location) - 1);
       currentData.events[i].start_time = events[i]["start_time"];
       currentData.events[i].valid = events[i]["valid"];
+      currentData.events[i].all_day = events[i]["all_day"] | false;
     }
 
     currentData.timestamp = doc["timestamp"];
@@ -541,23 +543,46 @@ void updateDisplay() {
 }
 
 void drawModernHeader() {
-  // Clean modern header with centered date only
-  display.setFont(&FreeMonoBold9pt7b);
-  
-  // Get current time for date only
+  // Two-line header: bold weekday on top, date (and optionally location) below.
+  static const char* weekdays[] = {"Sonntag", "Montag", "Dienstag", "Mittwoch",
+                                   "Donnerstag", "Freitag", "Samstag"};
+  static const char* months[] = {"Januar", "Februar", "Maerz", "April", "Mai", "Juni",
+                                 "Juli", "August", "September", "Oktober", "November", "Dezember"};
+
   time_t now = currentData.timestamp;
-  struct tm* timeInfo = localtime(&now);
-  
-  // Date centered in header (German format)
-  char dateText[12];
-  sprintf(dateText, "%02d.%02d.%d", timeInfo->tm_mday, timeInfo->tm_mon + 1, timeInfo->tm_year + 1900);
-  int dateWidth = strlen(dateText) * 11;  // FreeMonoBold9pt7b monospace advance
-  int centerX = (display.width() / 2) - (dateWidth / 2);
-  display.setCursor(centerX, 25);
-  display.print(dateText);
-  
-  // Header separator line - consistent width
-  display.drawLine(30, 35, display.width()-30, 35, GxEPD_BLACK);
+  struct tm timeInfo;
+  localtime_r(&now, &timeInfo);
+
+  int wday = timeInfo.tm_wday;
+  if (wday < 0 || wday > 6) wday = 0;
+  int mon = timeInfo.tm_mon;
+  if (mon < 0 || mon > 11) mon = 0;
+
+  // Line 1: weekday in Bold12pt (~14 px advance)
+  display.setFont(&FreeMonoBold12pt7b);
+  const char* weekdayStr = weekdays[wday];
+  int wdayWidth = strlen(weekdayStr) * 14;
+  display.setCursor((display.width() / 2) - (wdayWidth / 2), 24);
+  display.print(weekdayStr);
+
+  // Line 2: "30. April 2026" optionally followed by " - <Location>" in 9pt (~11 px advance).
+  // Truncate the combined line if it would not fit within ~38 chars (440 px usable, 11 px/char).
+  display.setFont(&FreeMono9pt7b);
+  char dateLine[40];
+  const char* loc = currentData.weather.location;
+  if (strlen(loc) > 0) {
+    snprintf(dateLine, sizeof(dateLine), "%d. %s %d - %s",
+             timeInfo.tm_mday, months[mon], timeInfo.tm_year + 1900, loc);
+  } else {
+    snprintf(dateLine, sizeof(dateLine), "%d. %s %d",
+             timeInfo.tm_mday, months[mon], timeInfo.tm_year + 1900);
+  }
+  int dateWidth = strlen(dateLine) * 11;
+  display.setCursor((display.width() / 2) - (dateWidth / 2), 46);
+  display.print(dateLine);
+
+  // Header separator line
+  display.drawLine(30, 56, display.width() - 30, 56, GxEPD_BLACK);
 }
 
 void drawModernWeatherCards() {
@@ -566,70 +591,68 @@ void drawModernWeatherCards() {
   int marginRight = 30;
   int totalWidth = display.width() - marginLeft - marginRight;
   int cardWidth = (totalWidth - 40) / 3;  // 3 cards with 20px spacing between them
-  int cardHeight = 130;  // Reduced height to prevent overlaps
-  int startY = 45;       // Start earlier for better spacing
-  
-  // Current Weather Card (Left) - German labels
-  drawWeatherCard(marginLeft, startY, cardWidth, cardHeight, "JETZT", 
-                  currentData.weather.current_temperature, 
-                  currentData.weather.current_description,
-                  "", false);  // No icons
-  
-  // Today Forecast Card (Center) - German labels
-  char todayTemp[20];
-  sprintf(todayTemp, "%.0f-%.0f°C", currentData.weather.today_min, currentData.weather.today_max);
-  drawWeatherCard(marginLeft + cardWidth + 20, startY, cardWidth, cardHeight, "HEUTE", 
-                  (currentData.weather.today_min + currentData.weather.today_max) / 2, 
-                  currentData.weather.today_description,
-                  "", false);
-  
-  // Tomorrow Forecast Card (Right) - if available - German labels
+  int cardHeight = 130;
+  int startY = 65;  // Below the new two-line header (separator at y=56)
+
+  // JETZT — single instantaneous reading, so pass the same value for min/max.
+  float now = currentData.weather.current_temperature;
+  drawWeatherCard(marginLeft, startY, cardWidth, cardHeight, "JETZT",
+                  now, now,
+                  currentData.weather.current_description);
+
+  // HEUTE — show min–max range
+  drawWeatherCard(marginLeft + cardWidth + 20, startY, cardWidth, cardHeight, "HEUTE",
+                  currentData.weather.today_min, currentData.weather.today_max,
+                  currentData.weather.today_description);
+
+  // MORGEN — show min–max range or fallback info card
   if (currentData.weather.has_tomorrow_data) {
-    char tomorrowTemp[20];
-    sprintf(tomorrowTemp, "%.0f-%.0f°C", currentData.weather.tomorrow_min, currentData.weather.tomorrow_max);
-    drawWeatherCard(marginLeft + (cardWidth * 2) + 40, startY, cardWidth, cardHeight, "MORGEN", 
-                    (currentData.weather.tomorrow_min + currentData.weather.tomorrow_max) / 2, 
-                    currentData.weather.tomorrow_description,
-                    "", false);
+    drawWeatherCard(marginLeft + (cardWidth * 2) + 40, startY, cardWidth, cardHeight, "MORGEN",
+                    currentData.weather.tomorrow_min, currentData.weather.tomorrow_max,
+                    currentData.weather.tomorrow_description);
   } else {
-    // No tomorrow data - draw a simple info card - German text
     drawInfoCard(marginLeft + (cardWidth * 2) + 40, startY, cardWidth, cardHeight, "MORGEN", "Keine Daten");
   }
-  
+
   // Weather details bar below cards with consistent width
-  drawWeatherDetailsBar(marginLeft, startY + cardHeight + 10);  // 185px position
+  drawWeatherDetailsBar(marginLeft, startY + cardHeight + 10);
 }
 
-void drawWeatherCard(int x, int y, int width, int height, const char* title, 
-                     float temperature, const char* description, const char* icon, bool showIcon) {
-  // Card border
+void drawWeatherCard(int x, int y, int width, int height, const char* title,
+                     float tempMin, float tempMax, const char* description) {
+  // Single 1 px border
   display.drawRect(x, y, width, height, GxEPD_BLACK);
-  display.drawRect(x+1, y+1, width-2, height-2, GxEPD_BLACK);  // Double border
-  
-  // Title - properly centered
+
+  // Title - properly centered (FreeMono9pt7b advance ~11 px)
   display.setFont(&FreeMono9pt7b);
-  int titleWidth = strlen(title) * (10 * 1.1);  // More accurate width calculation
-  int titleX = x + (width / 2) - (titleWidth / 2);
-  display.setCursor(titleX, y + 20);
+  int titleWidth = strlen(title) * 11;
+  display.setCursor(x + (width / 2) - (titleWidth / 2), y + 20);
   display.print(title);
-  
-  // Temperature - large and prominent (no icons, consistent positioning)
+
+  // Temperature - render single value or min–max range.
+  // The default Adafruit GFX 12pt font table is ASCII-only, so the UTF-8 bytes for
+  // "°" (0xC2 0xB0) are silently dropped. Compute centering from visible chars
+  // (= strlen − 2 for the one ° sequence in the format string), at 14 px per glyph.
   display.setFont(&FreeMonoBold12pt7b);
-  char tempStr[10];
-  sprintf(tempStr, "%.0f°C", temperature);
-  int tempX = x + (width / 2) - (strlen(tempStr) * 8 / 2);
-  display.setCursor(tempX, y + 60);  // Consistent positioning without icon logic
+  char tempStr[16];
+  if ((int)roundf(tempMin) == (int)roundf(tempMax)) {
+    snprintf(tempStr, sizeof(tempStr), "%.0f°C", tempMin);
+  } else {
+    snprintf(tempStr, sizeof(tempStr), "%.0f-%.0f°", tempMin, tempMax);
+  }
+  int visibleChars = (int)strlen(tempStr) - 2;
+  if (visibleChars < 0) visibleChars = 0;
+  display.setCursor(x + (width / 2) - ((visibleChars * 14) / 2), y + 60);
   display.print(tempStr);
-  
-  // Description - properly centered
+
+  // Description - cap at 11 chars so 11 × 11 = 121 px fits the ~126 px card.
   display.setFont(&FreeMono9pt7b);
   String desc = String(description);
-  if (desc.length() > 12) {
-    desc = desc.substring(0, 10) + "..";
+  if (desc.length() > 11) {
+    desc = desc.substring(0, 9) + "..";
   }
-  int descWidth = desc.length() * 11;  // FreeMono9pt7b monospace advance
-  int descX = x + (width / 2) - (descWidth / 2);
-  display.setCursor(descX, y + height - 20);
+  int descWidth = desc.length() * 11;
+  display.setCursor(x + (width / 2) - (descWidth / 2), y + height - 20);
   display.print(desc);
 }
 
@@ -792,24 +815,30 @@ void drawEventDateHeader(int x, int y, int width, struct tm* eventTm) {
 
 void drawEventTimelineCard(int x, int y, int width, CalendarEvent& event) {
   int cardHeight = 40;
-  
-  // Event card background
-  display.drawRect(x, y, width, cardHeight, GxEPD_BLACK);
-  
-  // Time indicator (left side) - date is shown in the date header above each group
-  if (event.start_time > 0) {
-    time_t eventTime = event.start_time;
-    struct tm timeInfo;
-    localtime_r(&eventTime, &timeInfo);
 
+  // No outer rectangle — the black HH:MM chip on the left is the visual anchor,
+  // and the 10 px gap between rows separates events vertically.
+
+  // Time chip (left side) — date shown in the date header above each group.
+  // For all-day events, render "GANZ" instead of HH:MM.
+  if (event.start_time > 0) {
     int timeBoxWidth = 70;
-    display.fillRect(x + 2, y + 2, timeBoxWidth, cardHeight - 4, GxEPD_BLACK);
+    display.fillRect(x, y, timeBoxWidth, cardHeight, GxEPD_BLACK);
     display.setTextColor(GxEPD_WHITE);
     display.setFont(&FreeMonoBold9pt7b);
 
-    // Time centered in the time box (HH:MM is 5 monospace chars ~55px in a 70px box)
-    display.setCursor(x + 9, y + 26);
-    display.printf("%02d:%02d", timeInfo.tm_hour, timeInfo.tm_min);
+    if (event.all_day) {
+      // "GANZ" — 4 monospace chars × 11 px = 44 px in 70 px chip → cursor x+13
+      display.setCursor(x + 13, y + 26);
+      display.print("GANZ");
+    } else {
+      time_t eventTime = event.start_time;
+      struct tm timeInfo;
+      localtime_r(&eventTime, &timeInfo);
+      // Time centered in the 70 px chip (HH:MM is 5 monospace chars ~55 px wide)
+      display.setCursor(x + 8, y + 26);
+      display.printf("%02d:%02d", timeInfo.tm_hour, timeInfo.tm_min);
+    }
 
     display.setTextColor(GxEPD_BLACK);  // Reset to black
   }
