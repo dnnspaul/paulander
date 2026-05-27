@@ -80,7 +80,7 @@ uv run python run.py
 
 - **Calendar Integration**: Connects to iCloud calendar via CalDAV
 - **Weather Display**: Current weather and forecast from OpenWeatherMap
-- **AI Image Generation**: Uses Gemini 2.5 Flash to create personalized vintage-style images based on weather and calendar events, optimized with high-performance vectorized Floyd-Steinberg dithering for e-ink displays
+- **AI Image Generation**: Uses Gemini 3.5 Flash to craft a detailed art prompt from the weather and calendar events, then Gemini 3.1 Flash Image (Nano Banana 2) to generate the picture, optimized with high-performance vectorized Floyd-Steinberg dithering for e-ink displays
 - **Dual Displays**: 
   - Color display: Daily AI-generated vintage poster refresh at 6 AM (800x480, 6 colors)
   - B&W display: Weather and calendar updates via ESP32 I2C communication (API cache: 30min, I2C send: 30sec)

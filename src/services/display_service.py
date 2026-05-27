@@ -724,38 +724,44 @@ class DisplayService:
         print(f"Weather summary: {weather_summary}")
         print(f"Events count: {len(events)}")
         
-        # Step 1: Generate detailed prompt using Gemini 2.5 Flash
+        # Step 1: Generate detailed prompt using Gemini 3.5 Flash
         prompt_generation_text = self._create_prompt_generation_request(weather_summary, events)
-        print(f"Step 1: Generating detailed prompt with Gemini 2.5 Flash...")
+        print(f"Step 1: Generating detailed prompt with Gemini 3.5 Flash...")
         
         try:
             # Configure the new Gemini client
             client = genai.Client(
                 api_key=gemini_api_key,
-                http_options=types.HttpOptions(timeout=120_000)
+                http_options=types.HttpOptions(timeout=300_000)
             )
 
             print(f"Gemini client configured successfully")
             
             # Generate the detailed prompt with retry logic
-            print(f"Calling Gemini 2.5 Flash for prompt generation...")
+            print(f"Calling Gemini 3.5 Flash for prompt generation...")
             prompt_response = self._retry_gemini_api_call(
                 client.models.generate_content,
-                model="gemini-2.5-flash",
-                contents=[prompt_generation_text]
+                model="gemini-3.5-flash",
+                contents=[prompt_generation_text],
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="high")
+                )
             )
             
             detailed_prompt = prompt_response.text.strip()
             print(f"✓ Step 1 completed - Generated prompt: {detailed_prompt}")
             
             # Step 2: Generate image using the detailed prompt with retry logic
-            print(f"Step 2: Generating image with Gemini 2.5 Flash Image...")
+            print(f"Step 2: Generating image with Gemini 3.1 Flash Image (Nano Banana 2)...")
             print(f"Using prompt: {detailed_prompt[:100]}...")
             
             image_response = self._retry_gemini_api_call(
                 client.models.generate_content,
-                model="gemini-2.5-flash-image",
-                contents=[detailed_prompt]
+                model="gemini-3.1-flash-image-preview",
+                contents=[detailed_prompt],
+                config=types.GenerateContentConfig(
+                    image_config=types.ImageConfig(image_size="1K")
+                )
             )
             
             print(f"✓ Gemini API call completed, processing response...")
