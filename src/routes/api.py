@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from PIL import Image, ImageDraw
 from datetime import datetime
 import subprocess
@@ -89,6 +89,22 @@ def refresh_display():
         display_type = request.get_json().get('type', 'both')
         result = display_service.refresh_display(display_type)
         return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/display/image/<display_type>', methods=['GET'])
+def get_display_image(display_type):
+    """Serve the latest rendered image for a display ('color' or 'bw')"""
+    try:
+        if display_type != 'color':
+            return jsonify({'error': 'Invalid display type'}), 400
+        path = display_service.get_output_image_path(display_type)
+        if not path:
+            return jsonify({'error': 'No rendered image available yet'}), 404
+        response = send_file(path, mimetype='image/png')
+        # Always serve the freshest render; never let the browser cache it.
+        response.headers['Cache-Control'] = 'no-store, max-age=0'
+        return response
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

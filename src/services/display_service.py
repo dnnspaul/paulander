@@ -1,9 +1,9 @@
 import os
 import sys
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 import numpy as np
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from io import BytesIO
 import json
 from google import genai
@@ -169,6 +169,18 @@ class DisplayService:
             'last_bw_refresh': self._get_last_refresh_time('bw')
         }
     
+    def get_output_image_path(self, display_type: str) -> Optional[str]:
+        """Return the absolute path to the latest rendered color image.
+
+        'color' -> the dithered AI image sent to the color panel.
+        Returns None for any other type, or if no image has been rendered yet.
+        (The B&W panel is rendered by the ESP32, so there is no Pi-side image.)
+        """
+        if display_type != 'color':
+            return None
+        path = os.path.abspath('debug_generated_image.png')
+        return path if os.path.exists(path) else None
+
     def _get_last_refresh_time(self, display_type: str) -> str:
         """Get last refresh time from file"""
         filename = f"last_refresh_{display_type}.txt"
@@ -486,8 +498,7 @@ class DisplayService:
         
         # Initialize I2C if needed
         if not self._ensure_i2c_initialized():
-            print("✗ I2C not available, saving mock data instead")
-            self._create_mock_bw_display()
+            print("✗ I2C not available — cannot reach ESP32 (it renders the B&W panel)")
             return
         
         try:
@@ -570,8 +581,6 @@ class DisplayService:
             
         except Exception as e:
             print(f"✗ I2C communication failed: {e}")
-            print("Falling back to mock display")
-            self._create_mock_bw_display()
     
     def _prepare_esp32_data(self):
         """Prepare JSON data for ESP32 communication"""
@@ -678,20 +687,6 @@ class DisplayService:
         # Calculate SHA256 hash and return first 8 characters (32-bit equivalent)
         hash_object = hashlib.sha256(json_string.encode('utf-8'))
         return hash_object.hexdigest()[:8]
-    
-    def _create_mock_bw_display(self):
-        """Create mock B&W display output when I2C is not available"""
-        try:
-            if not self.cached_weather_data:
-                print("✗ No cached data for mock display")
-                return
-            
-            image = self.create_bw_display_image()
-            image.save('bw_display_output.png')
-            print("✓ B&W display mocked - image saved as bw_display_output.png")
-            
-        except Exception as e:
-            print(f"✗ Mock display creation failed: {e}")
     
     def generate_daily_image(self) -> Image.Image:
         """Generate AI image based on calendar events and weather"""
@@ -971,141 +966,6 @@ class DisplayService:
         print(f"✓ Vectorized dithering completed in {end_time - start_time:.2f} seconds")
         
         return Image.fromarray(img_array, 'RGB')
-    
-    
-    def create_bw_display_image(self) -> Image.Image:
-        """Create B&W display image with weather and calendar info using cached data"""
-        # Create image with white background
-        image = Image.new('1', (self.BW_WIDTH, self.BW_HEIGHT), 1)  # '1' mode for 1-bit pixels
-        draw = ImageDraw.Draw(image)
-        
-        # Try to load fonts
-        try:
-            large_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
-            medium_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22)
-            small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
-        except:
-            large_font = medium_font = small_font = ImageFont.load_default()
-        
-        # Use cached data if available, otherwise fetch fresh data
-        if self.cached_weather_data:
-            weather = self.cached_weather_data
-        else:
-            try:
-                weather_raw = self.weather_service.get_current_weather()
-                weather = {
-                    'temperature': weather_raw.get('temperature', '?'),
-                    'description': weather_raw.get('description', 'N/A'),
-                    'location': weather_raw.get('location', '')
-                }
-            except:
-                weather = {'temperature': '?', 'description': 'Weather unavailable', 'location': ''}
-        
-        if self.cached_calendar_data:
-            events = self.cached_calendar_data
-        else:
-            try:
-                events_raw = self.calendar_service.get_upcoming_events(days_ahead=3)
-                events = []
-                for event in events_raw[:6]:
-                    # Safely handle start time
-                    start_time = 0
-                    if event.get('start') and hasattr(event['start'], 'timestamp'):
-                        try:
-                            start_time = int(event['start'].timestamp())
-                        except (AttributeError, TypeError):
-                            start_time = 0
-                    
-                    events.append({
-                        'title': event.get('title', ''),
-                        'location': event.get('location', ''),
-                        'start_time': start_time,
-                        'valid': bool(event.get('title'))
-                    })
-            except:
-                events = []
-        
-        # Draw weather section
-        temp_str = f"{weather.get('temperature', '?')}"
-        if isinstance(weather.get('temperature'), (int, float)):
-            temp_str = f"{weather['temperature']:.1f}"
-        draw.text((20, 20), f"{temp_str}°C", fill=0, font=large_font)
-        draw.text((20, 60), weather.get('description', 'N/A'), fill=0, font=medium_font)
-        
-        if weather.get('location'):
-            draw.text((20, 90), weather['location'], fill=0, font=small_font)
-        
-        # Draw line separator
-        draw.line([(20, 130), (self.BW_WIDTH - 20, 130)], fill=0, width=2)
-        
-        # Draw upcoming events
-        draw.text((20, 150), "Upcoming Events:", fill=0, font=medium_font)
-        
-        y_pos = 190
-        valid_events = [e for e in events if e.get('valid', True)]
-        
-        for event in valid_events[:6]:  # Show max 6 events
-            if y_pos > self.BW_HEIGHT - 40:
-                break
-                
-            # Format event text
-            event_title = event.get('title', '')
-            event_text = event_title[:40] + ('...' if len(event_title) > 40 else '')
-            draw.text((20, y_pos), event_text, fill=0, font=small_font)
-            
-            # Event time and location
-            if event.get('start_time', 0) > 0:
-                try:
-                    event_time = datetime.fromtimestamp(event['start_time'])
-                    time_str = event_time.strftime("%m/%d %H:%M")
-                    
-                    location_str = ""
-                    if event.get('location'):
-                        location_str = f" @ {event['location']}"
-                    
-                    draw.text((20, y_pos + 20), f"{time_str}{location_str}", fill=0, font=small_font)
-                except:
-                    pass
-            
-            y_pos += 50
-        
-        if not valid_events:
-            draw.text((20, 190), "No upcoming events", fill=0, font=small_font)
-        
-        return image
-    
-    def _wrap_text(self, text: str, font, max_width: int) -> List[str]:
-        """Wrap text to fit within max_width"""
-        words = text.split()
-        lines = []
-        current_line = []
-        
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            try:
-                if font.getsize(test_line)[0] <= max_width:
-                    current_line.append(word)
-                else:
-                    if current_line:
-                        lines.append(' '.join(current_line))
-                        current_line = [word]
-                    else:
-                        lines.append(word)  # Single word too long
-            except:
-                # Fallback if getsize not available
-                if len(test_line) * 10 <= max_width:  # Rough estimate
-                    current_line.append(word)
-                else:
-                    if current_line:
-                        lines.append(' '.join(current_line))
-                        current_line = [word]
-                    else:
-                        lines.append(word)
-        
-        if current_line:
-            lines.append(' '.join(current_line))
-        
-        return lines
     
     def _retry_gemini_api_call(self, func, *args, max_retries=3, initial_delay=1.0, **kwargs):
         """

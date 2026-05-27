@@ -140,6 +140,28 @@
         </div>
     </div>
     
+    <!-- Rendered Color Image -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <div class="px-4 py-5 sm:p-6">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-baseline gap-3">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Color Display</h3>
+                    <span class="text-xs text-gray-500">[[ formatRefresh(displayStatus.last_color_refresh) ]]</span>
+                </div>
+                <button @click="reloadImages" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    <i class="fas fa-sync-alt mr-2"></i>
+                    Reload
+                </button>
+            </div>
+            <div class="max-w-2xl mx-auto border border-gray-200 rounded-lg overflow-hidden bg-gray-100 aspect-[5/3] flex items-center justify-center">
+                <img v-show="!colorImageError" :src="'/api/display/image/color?t=' + imageVersion" @load="colorImageError = false" @error="colorImageError = true" class="w-full h-full object-contain" alt="Color display render">
+                <div v-if="colorImageError" class="text-sm text-gray-400 p-6 text-center">
+                    <i class="fas fa-image mr-2"></i>No image rendered yet
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Display Controls -->
     <div class="bg-white shadow rounded-lg">
         <div class="px-4 py-5 sm:p-6">
@@ -178,7 +200,9 @@ createApp({
                 bw: 'unknown'
             },
             loading: false,
-            refreshing: null
+            refreshing: null,
+            imageVersion: Date.now(),
+            colorImageError: false
         }
     },
     computed: {
@@ -222,23 +246,37 @@ createApp({
                 this.loadEvents(),
                 this.loadDisplayStatus()
             ]);
+            this.imageVersion = Date.now();
             this.loading = false;
         },
-        
+
         async refreshDisplay(type) {
             this.refreshing = type;
             try {
                 await axios.post('/api/display/refresh', { type });
                 await this.loadDisplayStatus();
+                this.imageVersion = Date.now();
             } catch (error) {
                 console.error('Error refreshing display:', error);
             }
             this.refreshing = null;
         },
-        
+
+        reloadImages() {
+            this.colorImageError = false;
+            this.imageVersion = Date.now();
+        },
+
         formatDate(dateString) {
             const date = new Date(dateString);
             return date.toLocaleDateString("de-DE") + ' ' + date.toLocaleTimeString("de-DE", { hour: '2-digit', minute: '2-digit' });
+        },
+
+        formatRefresh(value) {
+            if (!value || value === 'Never') return 'Never updated';
+            const date = new Date(value);
+            if (isNaN(date.getTime())) return value;
+            return 'Updated ' + date.toLocaleDateString('de-DE') + ' ' + date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
         }
     },
     
