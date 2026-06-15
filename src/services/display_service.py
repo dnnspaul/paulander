@@ -752,7 +752,7 @@ class DisplayService:
             
             image_response = self._retry_gemini_api_call(
                 client.models.generate_content,
-                model="gemini-3.1-flash-image-preview",
+                model="gemini-3.1-flash-image",
                 contents=[detailed_prompt],
                 config=types.GenerateContentConfig(
                     image_config=types.ImageConfig(image_size="1K")
