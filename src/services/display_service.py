@@ -10,6 +10,8 @@ from google import genai
 from google.genai import types
 import struct
 import time
+import random
+import re
 import pytz
 import hashlib
 import httpx
@@ -816,6 +818,52 @@ class DisplayService:
             print(f"Traceback: {traceback.format_exc()}")
             raise
     
+    # Matches {random:a|b|c} placeholders. The body may contain spaces, commas
+    # and pipes, but no braces, so it never swallows other {variable} fields.
+    _RANDOM_PLACEHOLDER_RE = re.compile(r'\{random:([^{}]+)\}', re.IGNORECASE)
+
+    def _resolve_random_placeholders(self, text: str) -> str:
+        """Resolve {random:a|b|c} placeholders by picking one option at random.
+
+        This runs before the regular .format() substitution so the generated
+        prompt varies from day to day (e.g. the protagonist's clothing colour),
+        instead of the LLM defaulting to the first listed option every time.
+
+        Syntax:
+          {random:bordeaux red|pink|violet}      -> uniform pick
+          {random:bordeaux red*3|pink|violet*1}  -> weighted pick (default 1)
+
+        Each placeholder is resolved independently, so a template may contain
+        several of them. Whitespace around options is trimmed and empty options
+        are ignored.
+        """
+        def _pick(match: 're.Match') -> str:
+            choices: List[str] = []
+            weights: List[float] = []
+            for raw_option in match.group(1).split('|'):
+                option = raw_option.strip()
+                if not option:
+                    continue
+                weight = 1.0
+                weight_match = re.search(r'\*\s*([0-9]+(?:\.[0-9]+)?)\s*$', option)
+                if weight_match:
+                    weight = float(weight_match.group(1))
+                    option = option[:weight_match.start()].strip()
+                if not option:
+                    continue
+                choices.append(option)
+                weights.append(weight)
+
+            if not choices:
+                # Nothing usable inside the braces - leave the original intact.
+                return match.group(0)
+
+            chosen = random.choices(choices, weights=weights, k=1)[0]
+            print(f"🎲 Random placeholder resolved: one of {choices} -> '{chosen}'")
+            return chosen
+
+        return self._RANDOM_PLACEHOLDER_RE.sub(_pick, text)
+
     def _create_prompt_generation_request(self, weather_summary: str, events: List[Dict]) -> str:
         """Create the prompt generation request for Gemini"""
         # Get today's date
@@ -846,13 +894,18 @@ class DisplayService:
             # Fallback to default template if not configured
             prompt_template = self.config_service.default_config['ai_prompt_template']
         
+        # Resolve {random:a|b|c} placeholders first so each generation can pick
+        # a different option (must happen before .format(), which would choke on
+        # the unknown 'random' field otherwise).
+        prompt_template = self._resolve_random_placeholders(prompt_template)
+
         # Replace variables in the template
         prompt_request = prompt_template.format(
             today_date=today_date,
             weather_summary=weather_summary,
             events_text=events_text
         )
-        
+
         return prompt_request
     
     def _resize_and_crop_image(self, image: Image.Image, target_width: int, target_height: int) -> Image.Image:
